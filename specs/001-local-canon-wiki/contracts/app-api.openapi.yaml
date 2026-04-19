@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: Author Canon Keeper Local App API
+  version: 0.1.0
+  description: Local SvelteKit server endpoints consumed by the desktop-oriented UI.
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/setup/provider/test:
+    post:
+      summary: Test a provider API key during onboarding or settings updates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderTestRequest"
+      responses:
+        "200":
+          description: Provider connection tested.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderTestResponse"
+  /api/setup/project:
+    post:
+      summary: Create the single local project and seed project-data outputs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSetupRequest"
+      responses:
+        "201":
+          description: Project created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+  /api/chapters:
+    get:
+      summary: List chapters for sidebar and navigation.
+      responses:
+        "200":
+          description: Ordered chapter list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [chapters]
+                properties:
+                  chapters:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChapterSummary"
+    post:
+      summary: Create a chapter draft.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChapterWriteRequest"
+      responses:
+        "201":
+          description: Chapter created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChapterDetail"
+  /api/chapters/{chapterId}:
+    get:
+      summary: Read a chapter for editing.
+      parameters:
+        - $ref: "#/components/parameters/ChapterId"
+      responses:
+        "200":
+          description: Chapter detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChapterDetail"
+    put:
+      summary: Save chapter edits locally without scanning.
+      parameters:
+        - $ref: "#/components/parameters/ChapterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChapterWriteRequest"
+      responses:
+        "200":
+          description: Chapter saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChapterDetail"
+  /api/chapters/{chapterId}/scan:
+    post:
+      summary: Save the latest chapter state, create a version snapshot, and start a scan job.
+      parameters:
+        - $ref: "#/components/parameters/ChapterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "202":
+          description: Scan job started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanJobResponse"
+        "409":
+          description: Save failed or another scan is already active.
+  /api/scan-jobs/{scanJobId}:
+    get:
+      summary: Poll scan progress and result summary.
+      parameters:
+        - $ref: "#/components/parameters/ScanJobId"
+      responses:
+        "200":
+          description: Scan job status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanJobResponse"
+  /api/wiki/tree:
+    get:
+      summary: Return sidebar navigation tree including chapters, category pages, articles, and stub markers.
+      responses:
+        "200":
+          description: Wiki tree.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WikiTreeResponse"
+  /api/wiki/{category}/{slug}:
+    get:
+      summary: Load an article or generated page for the main content pane.
+      parameters:
+        - $ref: "#/components/parameters/Category"
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: Wiki content.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WikiPageResponse"
+  /api/chat/query:
+    post:
+      summary: Answer a canon-only question using retrieved local project context.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatQueryRequest"
+      responses:
+        "200":
+          description: Canon answer generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatQueryResponse"
+  /api/export/zip:
+    post:
+      summary: Generate a zip export of the local project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeSecrets:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Export ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileName, downloadPath]
+                properties:
+                  fileName:
+                    type: string
+                  downloadPath:
+                    type: string
+components:
+  parameters:
+    ChapterId:
+      name: chapterId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScanJobId:
+      name: scanJobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Category:
+      name: category
+      in: path
+      required: true
+      schema:
+        type: string
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    ProviderTestRequest:
+      type: object
+      required: [provider, apiKey]
+      properties:
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        apiKey:
+          type: string
+    ProviderTestResponse:
+      type: object
+      required: [provider, ok]
+      properties:
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        ok:
+          type: boolean
+        message:
+          type: string
+    ProjectSetupRequest:
+      type: object
+      required: [name, provider]
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        model:
+          type: string
+        rootPath:
+          type: string
+    ProjectResponse:
+      type: object
+      required: [id, name, provider, rootPath, syncStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        rootPath:
+          type: string
+        syncStatus:
+          type: string
+          enum: [healthy, degraded, repairing]
+    ChapterWriteRequest:
+      type: object
+      required: [title, text]
+      properties:
+        number:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        text:
+          type: string
+        fontSize:
+          type: integer
+    ChapterSummary:
+      type: object
+      required: [id, title, status, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, saved, scanned, stale]
+        updatedAt:
+          type: string
+          format: date-time
+    ChapterDetail:
+      allOf:
+        - $ref: "#/components/schemas/ChapterSummary"
+        - type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+            latestVersionId:
+              type: string
+              format: uuid
+              nullable: true
+            lastScannedVersionId:
+              type: string
+              format: uuid
+              nullable: true
+    ScanRequest:
+      type: object
+      properties:
+        forceRescan:
+          type: boolean
+          default: false
+    ScanJobResponse:
+      type: object
+      required: [id, chapterId, chapterVersionId, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        chapterId:
+          type: string
+          format: uuid
+        chapterVersionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            [
+              queued,
+              gathering-context,
+              running,
+              reconciling,
+              regenerating,
+              success,
+              failed,
+            ]
+        stageLabel:
+          type: string
+        summary:
+          $ref: "#/components/schemas/ScanSummary"
+        errorMessage:
+          type: string
+          nullable: true
+    ScanSummary:
+      type: object
+      properties:
+        articlesCreated:
+          type: array
+          items:
+            type: string
+        articlesUpdated:
+          type: array
+          items:
+            type: string
+        stubsCreated:
+          type: array
+          items:
+            type: string
+        chronologyUpdated:
+          type: array
+          items:
+            type: string
+        continuityUpdated:
+          type: array
+          items:
+            type: string
+        contradictionsFlagged:
+          type: array
+          items:
+            type: string
+    WikiTreeResponse:
+      type: object
+      required: [nodes]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/WikiTreeNode"
+    WikiTreeNode:
+      type: object
+      required: [id, label, kind]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [chapter, category, article, generated-page]
+        isStub:
+          type: boolean
+        href:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/WikiTreeNode"
+    WikiPageResponse:
+      type: object
+      required: [title, body, kind]
+      properties:
+        title:
+          type: string
+        kind:
+          type: string
+          enum:
+            [article, category-all, chronology, continuity, contradiction-audit]
+        category:
+          type: string
+        isStub:
+          type: boolean
+        body:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        backlinks:
+          type: array
+          items:
+            type: string
+    ChatQueryRequest:
+      type: object
+      required: [question]
+      properties:
+        conversationId:
+          type: string
+          format: uuid
+          nullable: true
+        question:
+          type: string
+    ChatQueryResponse:
+      type: object
+      required: [answer, evidence]
+      properties:
+        answer:
+          type: object
+          required: [direct, confirmedEvidence, inferred, unresolved]
+          properties:
+            direct:
+              type: string
+            confirmedEvidence:
+              type: array
+              items:
+                type: string
+            inferred:
+              type: array
+              items:
+                type: string
+            unresolved:
+              type: array
+              items:
+                type: string
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [type, refId, label]
+            properties:
+              type:
+                type: string
+                enum: [chapter, article, chronology, watchlist, contradiction]
+              refId:
+                type: string
+              label:
+                type: string

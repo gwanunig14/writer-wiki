@@ -1,0 +1,49 @@
+import { z } from "zod";
+
+export const scanEntitySchema = z.object({
+  name: z.string().min(1),
+  category: z.enum(["character", "location", "item", "organization"]),
+  summary: z.string().min(1),
+  isStub: z.boolean(),
+  aliases: z.array(z.string()).default([]),
+  links: z
+    .array(z.object({ targetName: z.string(), relationType: z.string() }))
+    .default([]),
+});
+
+export const chronologyItemSchema = z.object({
+  label: z.string().min(1),
+  body: z.string().min(1),
+  confidence: z.enum(["confirmed", "probable", "possible"]).default("probable"),
+});
+
+export const watchlistItemSchema = z.object({
+  type: z.enum([
+    "contradiction",
+    "missing-description",
+    "name-collision",
+    "timeline-risk",
+    "relationship-ambiguity",
+    "item-clarification",
+    "location-risk",
+  ]),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+});
+
+export const scanResultSchema = z.object({
+  entities: z.array(scanEntitySchema).default([]),
+  chronology: z.array(chronologyItemSchema).default([]),
+  watchlist: z.array(watchlistItemSchema).default([]),
+  summary: z.object({
+    articlesCreated: z.array(z.string()).default([]),
+    articlesUpdated: z.array(z.string()).default([]),
+    stubsCreated: z.array(z.string()).default([]),
+    chronologyUpdated: z.array(z.string()).default([]),
+    continuityUpdated: z.array(z.string()).default([]),
+    contradictionsFlagged: z.array(z.string()).default([]),
+  }),
+});
+
+export type ScanResult = z.infer<typeof scanResultSchema>;
+export type ScanEntity = z.infer<typeof scanEntitySchema>;

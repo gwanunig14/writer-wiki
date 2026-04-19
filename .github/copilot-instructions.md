@@ -1,4 +1,7 @@
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+
+Current implementation plan: specs/001-local-canon-wiki/plan.md
+Read this plan for the active feature's technologies, structure, workflow,
+and delivery constraints before making changes.
+
 <!-- SPECKIT END -->

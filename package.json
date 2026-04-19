@@ -1,0 +1,44 @@
+{
+  "name": "author-canon-keeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "npm run build && node build",
+    "preview": "vite preview",
+    "postinstall": "svelte-kit sync",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "db:migrate": "tsx src/lib/server/db/migrate.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "@sveltejs/adapter-node": "^5.2.12",
+    "@sveltejs/kit": "^2.17.1",
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^11.8.1",
+    "drizzle-orm": "^0.39.1",
+    "markdown-it": "^14.1.0",
+    "openai": "^5.0.1",
+    "svelte": "^5.28.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@types/archiver": "^7.0.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.13.10",
+    "drizzle-kit": "^0.30.4",
+    "svelte-check": "^4.1.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.8"
+  }
+}
