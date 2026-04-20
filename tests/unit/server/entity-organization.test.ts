@@ -28,7 +28,8 @@ describe("entity organization", () => {
       name: "Marcus Day",
       slug: "marcus-day",
       category: "character",
-      articleBody: "Protagonist bounty hunter returning home.",
+      subtype: "Main",
+      articleBody: "Bounty hunter returning home.",
     });
     const minor = makeEntity({
       name: "George",
@@ -106,6 +107,28 @@ describe("entity organization", () => {
     ]);
   });
 
+  it("does not create a parent cycle between Kinburgh and City Watch Headquarters", () => {
+    const kinburgh = makeEntity({
+      id: "kinburgh",
+      name: "Kinburgh",
+      slug: "kinburgh",
+      category: "location",
+      articleBody: "Large city with a city watch headquarters.",
+    });
+    const headquarters = makeEntity({
+      id: "hq",
+      name: "City Watch Headquarters",
+      slug: "city-watch-headquarters",
+      category: "location",
+      articleBody:
+        "Headquarters of Kinburgh City Watch. Long building on west side of Kinburgh's third tier.",
+    });
+
+    expect(
+      getEntityFolderSegments(headquarters, [kinburgh, headquarters]),
+    ).toEqual(["Kinburgh"]);
+  });
+
   it("prefers explicit folder paths over inferred folders", () => {
     const item = makeEntity({
       name: "Belt",
@@ -126,7 +149,8 @@ describe("entity organization", () => {
       name: "Marcus Day",
       slug: "marcus-day",
       category: "character",
-      articleBody: "Protagonist bounty hunter.",
+      subtype: "Main",
+      articleBody: "Bounty hunter.",
     });
     const george = makeEntity({
       name: "George",

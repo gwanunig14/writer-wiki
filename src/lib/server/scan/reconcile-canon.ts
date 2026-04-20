@@ -78,6 +78,57 @@ function normalizeEntityEvidence(
   return { isStub: true, evidenceStatus: "mentioned-only" as const };
 }
 
+function chooseCanonicalArticleBody(input: {
+  existingName: string;
+  incomingName: string;
+  canonicalName: string;
+  existingArticleBody: string;
+  incomingArticleBody: string;
+  category: ScanResult["entities"][number]["category"];
+  existingIsStub: boolean;
+  incomingIsStub: boolean;
+}) {
+  const existingBody = input.existingArticleBody.trim();
+  const incomingBody = input.incomingArticleBody.trim();
+
+  if (!existingBody) {
+    return incomingBody;
+  }
+
+  if (!incomingBody) {
+    return existingBody;
+  }
+
+  if (input.existingIsStub && !input.incomingIsStub) {
+    return incomingBody;
+  }
+
+  if (
+    input.category === "character" &&
+    normalizeAliasValue(input.canonicalName).toLowerCase() ===
+      normalizeAliasValue(input.existingName).toLowerCase() &&
+    normalizeAliasValue(input.incomingName).toLowerCase() !==
+      normalizeAliasValue(input.canonicalName).toLowerCase()
+  ) {
+    return existingBody;
+  }
+
+  const incomingWordCount = countWords(incomingBody);
+  const existingWordCount = countWords(existingBody);
+  const incomingSentenceCount = countSentences(incomingBody);
+  const existingSentenceCount = countSentences(existingBody);
+
+  if (
+    incomingSentenceCount > existingSentenceCount ||
+    (incomingSentenceCount === existingSentenceCount &&
+      incomingWordCount > existingWordCount)
+  ) {
+    return incomingBody;
+  }
+
+  return existingBody;
+}
+
 function parseSourceChapterIds(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
     return [] as string[];
@@ -257,6 +308,24 @@ function normalizeAliasValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function inferEntitySubtype(entity: ScanResult["entities"][number]) {
+  if (entity.category !== "character") {
+    return null;
+  }
+
+  const text = `${entity.name} ${entity.summary}`.toLowerCase();
+
+  if (
+    /\b(?:protagonist|main character|lead character|primary character|primary pov|on-page primary character|point-of-view|point of view|pov)\b/.test(
+      text,
+    )
+  ) {
+    return "Main";
+  }
+
+  return null;
+}
+
 function buildWatchOrganizationAliases(name: string) {
   const normalizedName = normalizeAliasValue(name);
   const articleStripped = stripLeadingArticle(normalizedName);
@@ -311,6 +380,40 @@ function scoreCanonicalName(
   return score;
 }
 
+function startsWithHonorific(name: string) {
+  return /^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i.test(
+    normalizeAliasValue(name),
+  );
+}
+
+function endsWithUncertainCharacterSuffix(name: string) {
+  return /\b(?:something|someone|somebody)$/i.test(normalizeAliasValue(name));
+}
+
+function getCharacterSurname(name: string) {
+  const stripped = normalizeAliasValue(name)
+    .replace(/^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i, "")
+    .trim();
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+  return tokens.length ? tokens[tokens.length - 1].toLowerCase() : "";
+}
+
+function isHonorificSurnameVariant(name: string) {
+  const normalized = normalizeAliasValue(name);
+  const stripped = normalized.replace(
+    /^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i,
+    "",
+  );
+  const originalTokens = normalized.split(/\s+/).filter(Boolean);
+  const strippedTokens = stripped.split(/\s+/).filter(Boolean);
+
+  return (
+    stripped !== normalized &&
+    originalTokens.length === 2 &&
+    strippedTokens.length === 1
+  );
+}
+
 function chooseCanonicalEntityName(
   existingName: string,
   incomingName: string,
@@ -320,6 +423,46 @@ function chooseCanonicalEntityName(
   const normalizedIncoming = normalizeAliasValue(incomingName);
 
   if (normalizedExisting.toLowerCase() === normalizedIncoming.toLowerCase()) {
+    return normalizedExisting;
+  }
+
+  if (category === "character") {
+    if (
+      endsWithUncertainCharacterSuffix(normalizedExisting) &&
+      !endsWithUncertainCharacterSuffix(normalizedIncoming)
+    ) {
+      return normalizedIncoming;
+    }
+
+    if (
+      endsWithUncertainCharacterSuffix(normalizedIncoming) &&
+      !endsWithUncertainCharacterSuffix(normalizedExisting)
+    ) {
+      return normalizedExisting;
+    }
+
+    const existingSurname = getCharacterSurname(normalizedExisting);
+    const incomingSurname = getCharacterSurname(normalizedIncoming);
+    if (
+      existingSurname &&
+      incomingSurname &&
+      existingSurname === incomingSurname
+    ) {
+      if (
+        startsWithHonorific(normalizedExisting) &&
+        !startsWithHonorific(normalizedIncoming)
+      ) {
+        return normalizedIncoming;
+      }
+
+      if (
+        startsWithHonorific(normalizedIncoming) &&
+        !startsWithHonorific(normalizedExisting)
+      ) {
+        return normalizedExisting;
+      }
+    }
+
     return normalizedExisting;
   }
 
@@ -440,6 +583,37 @@ function findEntityByAliasOrSlug(
     }
   }
 
+  if (
+    entity.category === "character" &&
+    isHonorificSurnameVariant(entity.name)
+  ) {
+    const surname = getCharacterSurname(entity.name);
+    if (surname) {
+      const surnameMatches = db
+        .prepare(
+          `SELECT *
+             FROM entities
+            WHERE category = 'character'
+              AND lower(name) != lower(?)
+              AND lower(name) LIKE ?`,
+        )
+        .all(entity.name, `%${surname}`) as Array<Record<string, unknown>>;
+
+      const exactSurnameMatches = surnameMatches.filter((candidate) => {
+        const candidateSurname = getCharacterSurname(String(candidate.name));
+        const candidateTokens = normalizeAliasValue(String(candidate.name))
+          .split(/\s+/)
+          .filter(Boolean);
+
+        return candidateSurname === surname && candidateTokens.length >= 2;
+      });
+
+      if (exactSurnameMatches.length === 1) {
+        return exactSurnameMatches[0];
+      }
+    }
+  }
+
   return undefined;
 }
 
@@ -519,6 +693,7 @@ function upsertEntity(
   const timestamp = nowIso();
   const articleBody = entity.summary.trim();
   const aliasesToPersist = buildImplicitAliases(entity);
+  const inferredSubtype = inferEntitySubtype(entity);
 
   if (existing) {
     const wasStub = String(existing.is_stub) === "1";
@@ -532,11 +707,22 @@ function upsertEntity(
       entity.isStub,
       wasStub,
     );
+    const canonicalArticleBody = chooseCanonicalArticleBody({
+      existingName: String(existing.name),
+      incomingName: entity.name,
+      canonicalName,
+      existingArticleBody: String(existing.article_body ?? ""),
+      incomingArticleBody: articleBody,
+      category: entity.category,
+      existingIsStub: wasStub,
+      incomingIsStub: normalizedEvidence.isStub,
+    });
 
     db.prepare(
       `UPDATE entities
          SET name = ?,
              category = ?,
+           subtype = ?,
              is_stub = ?,
              article_body = ?,
              evidence_status = ?,
@@ -546,8 +732,9 @@ function upsertEntity(
     ).run(
       canonicalName,
       entity.category,
+      (existing.subtype as string | null) ?? inferredSubtype,
       normalizedEvidence.isStub ? "1" : "0",
-      wasStub && !entity.isStub ? articleBody : articleBody,
+      canonicalArticleBody,
       normalizedEvidence.evidenceStatus,
       chapterId,
       timestamp,
@@ -581,12 +768,13 @@ function upsertEntity(
     `INSERT INTO entities (
       id, name, slug, category, subtype, is_stub, descriptor, article_body, evidence_status,
       created_from_chapter_id, last_updated_from_chapter_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     entity.name,
     slug,
     entity.category,
+    inferredSubtype,
     normalizedEvidence.isStub ? "1" : "0",
     articleBody,
     normalizedEvidence.evidenceStatus,

@@ -62,6 +62,8 @@ When this is done, both `node` and `npm` should be installed.
 
 If your project folder is already in `Downloads`, `Desktop`, or another easy location, use the `cd` command to move into it.
 
+`cd` means "change directory." In simple terms, it tells Terminal which folder you want to work inside.
+
 Example:
 
 ```bash
@@ -70,12 +72,48 @@ cd "/Users/YOUR-NAME/Desktop/Writer Wiki/Writer Wiki"
 
 If your folder path contains spaces, keep the quotation marks.
 
+What this path means:
+
+- `/Users/YOUR-NAME/` is your home folder on Mac.
+- `Desktop/` means the folder is on your desktop.
+- `Writer Wiki/Writer Wiki` means there may be one outer folder and one inner project folder with the same name.
+
+If you are not sure whether you are using the correct folder, look for files such as:
+
+- `package.json`
+- `README.md`
+- `src/`
+- `static/`
+
 If you do not know the folder path:
 
 1. Open Finder
 2. Find the project folder
 3. Drag the folder into the Terminal window after typing `cd `
 4. Press `Enter`
+
+You can also do this:
+
+1. Open Finder.
+2. Open the project folder.
+3. Right-click inside the folder and choose a copy option for the folder path if available on your version of macOS.
+4. Paste that path after `cd ` in Terminal.
+
+After you press `Enter`, Terminal should switch into that folder. If you want to confirm you are in the right place, run:
+
+```bash
+pwd
+ls
+```
+
+`pwd` prints your current folder. `ls` shows the files in that folder. If you see `package.json`, you are in the correct project folder.
+
+If Terminal says `No such file or directory`, one of these is usually the problem:
+
+- The path was typed incorrectly.
+- A folder name is slightly different.
+- The quotation marks were left out even though the path contains spaces.
+- You are trying to enter the outer folder instead of the inner project folder.
 
 ### Step 4: Confirm Node.js Installed Correctly
 
@@ -157,6 +195,21 @@ cd "C:\Users\YOUR-NAME\Desktop\Writer Wiki\Writer Wiki"
 
 If your folder path contains spaces, keep the quotation marks.
 
+`cd` means "change directory." It tells PowerShell to start working inside that folder.
+
+What this path means:
+
+- `C:\Users\YOUR-NAME\` is your user folder on Windows.
+- `Desktop` means the folder is on your desktop.
+- `Writer Wiki\Writer Wiki` means there may be one outer folder and one inner project folder with the same name.
+
+If you are not sure whether you are using the correct folder, look for:
+
+- `package.json`
+- `README.md`
+- `src`
+- `static`
+
 If you do not know the folder path:
 
 1. Open File Explorer.
@@ -164,6 +217,22 @@ If you do not know the folder path:
 3. Click the folder path bar.
 4. Copy the full path.
 5. Use it after `cd` in PowerShell.
+
+After you press `Enter`, you can confirm you are in the right folder by running:
+
+```powershell
+Get-Location
+dir
+```
+
+`Get-Location` shows your current folder. `dir` lists the files in it. If you see `package.json`, you are in the correct project folder.
+
+If PowerShell says it cannot find the path, the most common causes are:
+
+- The folder path was copied incorrectly.
+- The project is in a different location than `Desktop`.
+- The quotation marks were left out even though the path contains spaces.
+- You are in the outer folder instead of the inner project folder.
 
 ### Step 4: Confirm Node.js Installed Correctly
 

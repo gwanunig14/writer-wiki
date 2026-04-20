@@ -9,6 +9,7 @@ import {
 } from "./user-canon-decisions";
 import { regenerateProjectFiles } from "$lib/server/sync/projector";
 import { regenerateGeneratedPages } from "$lib/server/scan/reconcile-canon";
+import { CHARACTER_FOLDER_OPTIONS } from "$lib/server/wiki/entity-organization";
 
 const categoryLabels = {
   character: "Characters",
@@ -27,6 +28,25 @@ function normalizeFolderPath(value: string | undefined) {
     .map((segment) => normalizeName(segment))
     .filter(Boolean)
     .join("/");
+}
+
+function normalizeCharacterFolderPath(value: string | undefined) {
+  const normalized = normalizeName(value ?? "");
+  if (!normalized) {
+    return "";
+  }
+
+  const matched = CHARACTER_FOLDER_OPTIONS.find(
+    (option) => option.toLowerCase() === normalized.toLowerCase(),
+  );
+
+  if (!matched) {
+    throw new Error(
+      `Character tier must be one of: ${CHARACTER_FOLDER_OPTIONS.join(", ")}.`,
+    );
+  }
+
+  return matched;
 }
 
 function getEntityByCategoryAndSlug(category: string, slug: string) {
@@ -320,7 +340,10 @@ export function updateDossierBySlug(input: {
   const existingName = String(entity.name);
   const existingCategory = entity.category as EntityCategory;
   const existingAliases = listEntityAliases(entityId);
-  const folderPath = normalizeFolderPath(input.folderPath);
+  const folderPath =
+    input.category === "character"
+      ? normalizeCharacterFolderPath(input.folderPath)
+      : normalizeFolderPath(input.folderPath);
   const parentEntityId = resolveLocationParentEntityId({
     entityId,
     category: input.category,

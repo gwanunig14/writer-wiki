@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import { chapterWorkspace } from "$lib/stores/chapter-workspace";
   import ScanProgress from "$lib/components/scan/ScanProgress.svelte";
 
@@ -9,21 +8,42 @@
   const workspace = chapterWorkspace;
   const { chapters, activeChapter, activeScanJob, loading, errorMessage } =
     workspace;
+  let chaptersLoaded = false;
+  let lastRequestedChapterId: string | null | undefined = undefined;
 
   onMount(async () => {
     await workspace.loadChapters();
-    if (initialChapterId) {
-      await workspace.loadChapter(initialChapterId);
-    }
+    chaptersLoaded = true;
   });
+
+  $: if (chaptersLoaded) {
+    void syncSelectedChapter(initialChapterId);
+  }
+
+  async function syncSelectedChapter(chapterId: string | null) {
+    if (chapterId === lastRequestedChapterId) {
+      return;
+    }
+
+    lastRequestedChapterId = chapterId;
+
+    if (chapterId) {
+      await workspace.loadChapter(chapterId);
+      return;
+    }
+
+    workspace.resetDraft();
+  }
 
   async function handleNewChapter() {
     workspace.resetDraft();
+    const { goto } = await import("$app/navigation");
     await goto("/chapters");
   }
 
   async function handleSave() {
     const chapter = await workspace.saveActiveChapter();
+    const { goto } = await import("$app/navigation");
     await goto(`/chapters/${chapter.id}`);
   }
 
@@ -32,6 +52,7 @@
     if (job.status === "success") {
       const chapter = $activeChapter;
       if (chapter.id) {
+        const { goto } = await import("$app/navigation");
         await goto(`/chapters/${chapter.id}`);
       }
     }

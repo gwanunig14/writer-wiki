@@ -1,7 +1,14 @@
+import { getDatabase } from "$lib/server/db/client";
 import type { WikiNode } from "$lib/types/domain";
 import type { EntitySummaryRecord } from "$lib/server/db/repositories/entity-repository";
 
 type Category = EntitySummaryRecord["category"];
+
+export const CHARACTER_FOLDER_OPTIONS = ["Main", "Major", "Minor"] as const;
+
+const characterFolderOrder = new Map<string, number>(
+  CHARACTER_FOLDER_OPTIONS.map((label, index) => [label, index]),
+);
 
 function parseSubtypePath(subtype: string | null) {
   return (subtype ?? "")
@@ -20,24 +27,48 @@ function createArticleNode(entity: EntitySummaryRecord): WikiNode {
   };
 }
 
-function inferCharacterSegments(entity: EntitySummaryRecord) {
-  const text = `${entity.name} ${entity.articleBody}`.toLowerCase();
+function buildCharacterChapterCountMap(entities: EntitySummaryRecord[]) {
+  if (entities.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const placeholders = entities.map(() => "?").join(", ");
+  let rows: Array<Record<string, unknown>> = [];
+
+  try {
+    rows = getDatabase()
+      .prepare(
+        `SELECT target_id, COUNT(DISTINCT source_chapter_id) AS chapter_count
+           FROM derived_dependencies
+          WHERE target_type = 'entity' AND target_id IN (${placeholders})
+          GROUP BY target_id`,
+      )
+      .all(...entities.map((entity) => entity.id)) as Array<
+      Record<string, unknown>
+    >;
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("no such table: derived_dependencies")
+    ) {
+      throw error;
+    }
+  }
+
+  return new Map(
+    rows.map((row) => [String(row.target_id), Number(row.chapter_count ?? 0)]),
+  );
+}
+
+function inferCharacterSegments(
+  entity: EntitySummaryRecord,
+  chapterAppearanceCount = 0,
+) {
   if (parseSubtypePath(entity.subtype).length > 0) {
     return parseSubtypePath(entity.subtype);
   }
 
-  if (
-    /\bprotagonist|main character|lead character|point-of-view|pov\b/.test(text)
-  ) {
-    return ["Main"];
-  }
-
-  if (
-    !entity.isStub &&
-    /\bally|companion|wife|husband|mother|father|son|daughter|captain|criminal|felon|member|baron|infamous|bounty hunter\b/.test(
-      text,
-    )
-  ) {
+  if (chapterAppearanceCount >= 2) {
     return ["Major"];
   }
 
@@ -124,7 +155,14 @@ function inferLocationParents(locations: EntitySummaryRecord[]) {
       }
 
       const candidateName = candidate.name.toLowerCase();
+      const entityTokenCount = entityName.split(/\s+/).filter(Boolean).length;
+      const candidateTokenCount = candidateName
+        .split(/\s+/)
+        .filter(Boolean).length;
       if (candidateName.includes(entityName)) {
+        continue;
+      }
+      if (candidateTokenCount > entityTokenCount) {
         continue;
       }
 
@@ -219,10 +257,16 @@ function buildLocationFolderSegments(
 export function getEntityFolderSegments(
   entity: EntitySummaryRecord,
   categoryEntities: EntitySummaryRecord[],
+  context?: {
+    characterChapterCounts?: Map<string, number>;
+  },
 ) {
   switch (entity.category) {
     case "character":
-      return inferCharacterSegments(entity);
+      return inferCharacterSegments(
+        entity,
+        context?.characterChapterCounts?.get(entity.id) ?? 0,
+      );
     case "item":
       return inferItemSegments(entity);
     case "organization":
@@ -238,6 +282,10 @@ export function buildCategoryTreeNodes(
 ) {
   const folderLookup = new Map<string, WikiNode>();
   const roots: WikiNode[] = [];
+  const characterChapterCounts =
+    category === "character"
+      ? buildCharacterChapterCountMap(entities)
+      : undefined;
 
   function ensureFolder(path: string[]) {
     let cursor = roots;
@@ -266,10 +314,46 @@ export function buildCategoryTreeNodes(
   }
 
   for (const entity of entities) {
-    const segments = getEntityFolderSegments(entity, entities);
+    const segments = getEntityFolderSegments(entity, entities, {
+      characterChapterCounts,
+    });
     const container = ensureFolder(segments);
     container.push(createArticleNode(entity));
   }
+
+  function sortNodes(nodes: WikiNode[]) {
+    nodes.sort((left, right) => {
+      if (
+        category === "character" &&
+        left.kind === "folder" &&
+        right.kind === "folder"
+      ) {
+        const leftRank =
+          characterFolderOrder.get(left.label) ?? Number.MAX_SAFE_INTEGER;
+        const rightRank =
+          characterFolderOrder.get(right.label) ?? Number.MAX_SAFE_INTEGER;
+        if (leftRank !== rightRank) {
+          return leftRank - rightRank;
+        }
+      }
+
+      if (left.kind !== right.kind) {
+        return left.kind === "folder" ? -1 : 1;
+      }
+
+      return left.label.localeCompare(right.label, undefined, {
+        sensitivity: "base",
+      });
+    });
+
+    for (const node of nodes) {
+      if (node.children) {
+        sortNodes(node.children);
+      }
+    }
+  }
+
+  sortNodes(roots);
 
   return roots;
 }

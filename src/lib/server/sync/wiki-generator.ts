@@ -5,12 +5,13 @@ import {
 } from "$lib/server/canon/continuity-manager";
 import {
   getEntityById,
+  listEntitiesByCategory,
   listAliasesForEntity,
   listEntities,
-  listEntitiesByCategory,
   type EntitySummaryRecord,
 } from "$lib/server/db/repositories/entity-repository";
 import { getBacklinksForEntity } from "./backlink-index";
+import { getEntityFolderSegments } from "$lib/server/wiki/entity-organization";
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -88,6 +89,8 @@ function linkifyCanonText(text: string, currentSlug?: string) {
 
 export function buildEntityWikiPage(entity: EntitySummaryRecord): WikiPage {
   const aliases = listAliasesForEntity(entity.id);
+  const characterEntities =
+    entity.category === "character" ? listEntitiesByCategory("character") : [];
   const locationNames = listEntitiesByCategory("location")
     .filter((location) => location.id !== entity.id)
     .map((location) => location.name);
@@ -110,7 +113,10 @@ export function buildEntityWikiPage(entity: EntitySummaryRecord): WikiPage {
       slug: entity.slug,
       category: entity.category,
       articleBody: entity.articleBody,
-      folderPath: entity.subtype ?? "",
+      folderPath:
+        entity.category === "character"
+          ? (getEntityFolderSegments(entity, characterEntities)[0] ?? "")
+          : (entity.subtype ?? ""),
       parentLocationName: parentLocation?.name,
       availableLocationNames: locationNames,
     },

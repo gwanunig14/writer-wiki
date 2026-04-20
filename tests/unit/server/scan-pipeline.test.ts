@@ -99,9 +99,21 @@ describe("scan pipeline", () => {
     expect(
       normalized.entities.some((entity) => entity.name === "Claudia"),
     ).toBe(true);
-    expect(normalized.entities.some((entity) => entity.name === "Elton")).toBe(
-      true,
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "character",
+      ),
     );
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "character",
+      ),
+    ).toBe(false);
     expect(normalized.entities.some((entity) => entity.name === "Fleck")).toBe(
       true,
     );
@@ -114,6 +126,500 @@ describe("scan pipeline", () => {
     expect(
       normalized.entities.some((entity) => entity.name === "Rulfshire Bay"),
     ).toBe(true);
+  });
+
+  it("upgrades supplemental character summaries when a later mention has stronger description detail", () => {
+    const chapterText = [
+      "Marcus Day came home to Claudia, his wife.",
+      "Claudia, his wife, hadn't lit the crystals yet, but smoke billowed from the chimney.",
+      "His wife pushed a strand of her golden hair behind her ear and stuck her knife into the chopping board.",
+      "Her pink lips were in a wide grin and she wiped flour onto the white apron covering a light purple dress covered in varied patches.",
+      "She cooked barefoot because she hated shoes, but her only shawl, a hand-knit, grey one, was draped over her arms to keep her warm.",
+      "He wrapped his arms around her taut, shapely frame and she closed her round, bright green eyes.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "A bounty hunter returning home.",
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const claudia = normalized.entities.find(
+      (entity) => entity.name === "Claudia" && entity.category === "character",
+    );
+
+    expect(claudia).toBeDefined();
+    expect(claudia?.summary).toContain("golden hair");
+    expect(claudia?.summary).toContain("bright green eyes");
+    expect(claudia?.summary).toContain("light purple dress");
+    expect(claudia?.summary).toContain("hand-knit, grey one");
+  });
+
+  it("treats a chapter-opening focal character as point-of-view and extracts self-description instead of scene description", () => {
+    const chapterText = [
+      "Dr. Isaiah Essex loosened his silk tie and yawned.",
+      "It was a pleasant evening for a walk.",
+      "Their orange glow cast a variety of flickering shadows on every building.",
+      "Twelve of those shadows belonged to Isaiah.",
+      "Not that he was short; he was decidedly average.",
+      "Isaiah hadn't thought to grab his leather gloves and blew on his hands.",
+      "A chilly wind blew down the street, and the coffee-brown hairs of his mustache tickled his upper lip.",
+      "Another light caught his hazel eye.",
+      "His collar was undone.",
+      "He didn't have any hat on, and his hair and mustache hadn't been combed since that morning.",
+      "Heavy bags pulled on his eyes.",
+      "Isaiah did not entertain in his house.",
+      "Isaiah filled the kettle with water and brought it back to the stove.",
+      "Six chapters in and Wilson's suggestion still seemed outrageous to Isaiah.",
+      "Isaiah crept to the hallway's first door on the left.",
+      "Isaiah jumped to his feet.",
+      "Isaiah knelt and placed his hand on her knee.",
+      "Isaiah slowly finished his tea.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const isaiah = normalized.entities.find(
+      (entity) =>
+        entity.name === "Isaiah Essex" && entity.category === "character",
+    );
+
+    expect(isaiah).toBeDefined();
+    expect(isaiah?.summary).toContain("Point-of-view character");
+    expect(isaiah?.summary).toContain("silk tie");
+    expect(isaiah?.summary).toContain("coffee-brown hairs of his mustache");
+    expect(isaiah?.summary).toContain("hazel eye");
+    expect(isaiah?.summary).not.toContain(
+      "flickering shadows on every building",
+    );
+  });
+
+  it("moves appearance traits out of Identity and into Physical Description", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: [
+              "## Core Status",
+              "- Male bounty hunter",
+              "",
+              "## Identity",
+              "- Male, green-eyed, bounty hunter",
+              "- Married to Claudia",
+              "",
+              "## Physical Description",
+              "- Missing / unestablished: No supported physical description is available in the current chapter snapshot.",
+              "",
+              "## Sources",
+              "- Source: Current chapter snapshot",
+            ].join("\n"),
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Marcus Day returned home after the hunt.",
+    );
+
+    const marcus = normalized.entities.find(
+      (entity) => entity.name === "Marcus Day",
+    );
+
+    expect(marcus).toBeDefined();
+    expect(marcus?.summary).toContain("## Identity\n- Male, bounty hunter");
+    expect(marcus?.summary).toContain("## Physical Description\n- Green-eyed");
+    expect(marcus?.summary).not.toContain(
+      "## Identity\n- Male, green-eyed, bounty hunter",
+    );
+    expect(marcus?.summary).not.toContain(
+      "No supported physical description is available in the current chapter snapshot.",
+    );
+  });
+
+  it("suppresses leading-preposition false positives like To Isaiah", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "To Isaiah's annoyance, one of those dressers appeared to be empty.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "To Isaiah"),
+    ).toBe(false);
+  });
+
+  it("does not turn prose words from Chapter 2 into single-word character pages", () => {
+    const chapterText = [
+      "Brushes of various uses he didn't understand lay on her vanity table with no rhyme or reason.",
+      "Baron Salem Lighton, the war hero, was especially well represented in her odd collage.",
+      "Only men who called on young ladies at this hour did so with expectations.",
+      "They did not make a habit of lingering, caroused with criminals, or eaten with them.",
+      "Marcus Day came home to Claudia.",
+      "Poor Jane was holding Michael while Bill Taylor asked if Isaiah was certain.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Bill Taylor",
+            category: "character",
+            summary: "Grounded summary",
+            isStub: false,
+            aliases: ["Bill"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    for (const junkName of [
+      "Brushes",
+      "Especially",
+      "Eaten",
+      "Caroused",
+      "Commotion",
+      "Foam",
+    ]) {
+      expect(
+        normalized.entities.some((entity) => entity.name === junkName),
+      ).toBe(false);
+    }
+  });
+
+  it("drops generic single-word provider character entries without proper-name evidence", () => {
+    const chapterText = [
+      "Women waited by the rail while Marcus asked about Louis.",
+      "Some said the fog would lift by noon.",
+      "Maybes drifted through the room as the argument stalled.",
+      "Foam slid off the horse and onto the stones.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Women",
+            category: "character",
+            summary: "Incorrect provider guess.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Some",
+            category: "character",
+            summary: "Incorrect provider guess.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Maybes",
+            category: "character",
+            summary: "Incorrect provider guess.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Foam",
+            category: "character",
+            summary: "Incorrect provider guess.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "Grounded summary.",
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    for (const junkName of ["Women", "Some", "Maybes", "Foam"]) {
+      expect(
+        normalized.entities.some((entity) => entity.name === junkName),
+      ).toBe(false);
+    }
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Marcus Day"),
+    ).toBe(true);
+  });
+
+  it("does not supplement generic single-word nouns from chapter prose", () => {
+    const chapterText = [
+      "Foam was forming on her lips.",
+      "Maybes were unreliable.",
+      "Some were stopped; most were not.",
+      "Widow or modern fashion statement? Women had started ignore the traditional Andrittan color meanings.",
+      "Marcus Day asked Claudia whether Louis Porter had already left The Warm Hearth.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "Grounded summary.",
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+          {
+            name: "Claudia",
+            category: "character",
+            summary: "Grounded summary.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Louis Porter",
+            category: "character",
+            summary: "Grounded summary.",
+            isStub: false,
+            aliases: ["Porter"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    for (const junkName of ["Foam", "Some", "Women", "Maybes"]) {
+      expect(
+        normalized.entities.some((entity) => entity.name === junkName),
+      ).toBe(false);
+    }
+  });
+
+  it("does not mark repeated non-focal names as point-of-view characters", () => {
+    const chapterText = [
+      "Kinburgh sat below the hill, all smokestacks and slate roofs.",
+      "Kinburgh's walls caught the late sun while the market bells rang.",
+      "By dusk Kinburgh had swallowed the last of the wagons.",
+      "Louis Porter swore The Shadow King paid him to do it.",
+      "Every rumor in the district led back to The Shadow King.",
+      "Marcus heard The Shadow King named again at the tavern.",
+      "Later, Kinburgh returned to the conversation as Marcus traced the route north.",
+      "No one agreed on what The Shadow King wanted, only that the name kept surfacing.",
+      "Kinburgh remained restless long after the crowd had gone.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Kinburgh",
+            category: "character",
+            summary: "Wrong category summary.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "The Shadow King",
+            category: "character",
+            summary: "Shadowy figure in the background.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const kinburgh = normalized.entities.find(
+      (entity) => entity.name === "Kinburgh",
+    );
+    const shadowKing = normalized.entities.find(
+      (entity) => entity.name === "The Shadow King",
+    );
+
+    expect(kinburgh?.category).toBe("location");
+    expect(kinburgh?.summary).not.toContain("Point-of-view character");
+    expect(shadowKing?.summary).not.toContain("Point-of-view character");
+  });
+
+  it("classifies possessive place references like Elton's townhouses as locations", () => {
+    const chapterText = [
+      "Another light caught his hazel eye, though, the only other one on the street, glowing in the upper window of a green house.",
+      "Tall, thin and pressed against its neighbors, like all of Elton's townhouses, this one was thoroughly modern with good sized, arched windows, a bay window, and a gabled roof.",
+      "In fact, Isaiah had been entertained at the Britton's house several times.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "character",
+      ),
+    ).toBe(false);
+  });
+
+  it("treats it-based city descriptions as location evidence for ambiguous single-word names", () => {
+    const chapterText = [
+      "A gun fight? Elton had some problems, there was the occasional murder like anywhere else, but a gun fight?",
+      "The Essexes had settled in Elton because it was a newer city, only about 40 years old, and it was small.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Elton" && entity.category === "character",
+      ),
+    ).toBe(false);
   });
 
   it("drops ungrounded hallucinated entities while keeping grounded ones", () => {
@@ -976,6 +1482,183 @@ describe("scan pipeline", () => {
     );
   });
 
+  it("captures fake names from dialogue exchanges as character aliases", () => {
+    const chapterText = [
+      "There he was. Louis Porter marched in the door.",
+      "Porter made eye contact with Marcus.",
+      '"Haven\'t seen you here before, friend."',
+      '"What\'s your name?"',
+      '"John Burton. Yours?"',
+      '"John also. John Letterer."',
+    ].join(" ");
+    const chapter = upsertChapter({
+      number: 1,
+      title: "One",
+      text: chapterText,
+    });
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "A bounty hunter tracking fugitives.",
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+          {
+            name: "Louis Porter",
+            category: "character",
+            summary: "A wanted criminal playing cards at the tavern.",
+            isStub: false,
+            aliases: ["Porter"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    reconcileCanon(chapter.id, normalized);
+
+    const db = getDatabase();
+    const marcusAliases = db
+      .prepare(
+        `SELECT a.alias
+           FROM entity_aliases a
+           JOIN entities e ON e.id = a.entity_id
+          WHERE e.name = ?
+          ORDER BY a.alias`,
+      )
+      .all("Marcus Day") as Array<{ alias: string }>;
+    const louisAliases = db
+      .prepare(
+        `SELECT a.alias
+           FROM entity_aliases a
+           JOIN entities e ON e.id = a.entity_id
+          WHERE e.name = ?
+          ORDER BY a.alias`,
+      )
+      .all("Louis Porter") as Array<{ alias: string }>;
+
+    expect(marcusAliases.map((row) => row.alias)).toEqual(
+      expect.arrayContaining(["John Burton"]),
+    );
+    expect(louisAliases.map((row) => row.alias)).toEqual(
+      expect.arrayContaining(["John Letterer"]),
+    );
+  });
+
+  it("does not let an alias-only character dossier overwrite the canonical character article body", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "One",
+      text: "Marcus Day used the name John Burton during a card game.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Marcus Day",
+          category: "character",
+          summary: [
+            "## Core Status",
+            "- Male bounty hunter",
+            "",
+            "## Identity",
+            "- Bounty hunter looking for Louis Porter",
+            "- Married to Claudia",
+            "",
+            "## Physical Description",
+            "- Green eyes",
+            "- Thinly bearded cheeks",
+          ].join("\n"),
+          isStub: false,
+          aliases: ["Marcus", "John Burton"],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Marcus Day"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "John Burton",
+          category: "character",
+          summary: [
+            "## Core Status",
+            "- Alias",
+            "",
+            "## Identity",
+            "- Alias used by Marcus Day while in tavern",
+            "",
+            "## Sources",
+            "- Used by Marcus Day during card game",
+          ].join("\n"),
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: [],
+        articlesUpdated: ["John Burton"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const marcus = listEntities().find(
+      (entity) => entity.name === "Marcus Day",
+    );
+    const marcusAliases = getDatabase()
+      .prepare(
+        `SELECT a.alias
+           FROM entity_aliases a
+           JOIN entities e ON e.id = a.entity_id
+          WHERE e.name = ?
+          ORDER BY a.alias`,
+      )
+      .all("Marcus Day") as Array<{ alias: string }>;
+
+    expect(marcus?.articleBody).toContain(
+      "Bounty hunter looking for Louis Porter",
+    );
+    expect(marcus?.articleBody).toContain("Green eyes");
+    expect(marcus?.articleBody).not.toContain(
+      "Alias used by Marcus Day while in tavern",
+    );
+    expect(marcusAliases.map((row) => row.alias)).toEqual(
+      expect.arrayContaining(["John Burton"]),
+    );
+  });
+
   it("merges The Watch into The City Watch while keeping City Watchmen separate", () => {
     const chapter = upsertChapter({
       number: 1,
@@ -1199,6 +1882,203 @@ describe("scan pipeline", () => {
     );
 
     expect(marcus?.isStub).toBe(false);
+  });
+
+  it("preserves inferred Main characters across later rescans", () => {
+    const first = upsertChapter({
+      number: 1,
+      title: "Marcus POV",
+      text: "Marcus hunts Louis.",
+    });
+    const second = upsertChapter({
+      number: 2,
+      title: "Isaiah POV",
+      text: "Isaiah worries about Mina.",
+    });
+
+    reconcileCanon(first.id, {
+      entities: [
+        {
+          name: "Marcus Day",
+          category: "character",
+          summary: "A bounty hunter and protagonist of chapter one.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Marcus Day"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    reconcileCanon(second.id, {
+      entities: [
+        {
+          name: "Isaiah Essex",
+          category: "character",
+          summary: "The point-of-view character for this chapter.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+        {
+          name: "Marcus Day",
+          category: "character",
+          summary: "Mentioned briefly in conversation.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Isaiah Essex"],
+        articlesUpdated: ["Marcus Day"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const marcus = listEntities().find(
+      (entity) => entity.name === "Marcus Day",
+    );
+    const isaiah = listEntities().find(
+      (entity) => entity.name === "Isaiah Essex",
+    );
+
+    expect(marcus?.subtype).toBe("Main");
+    expect(isaiah?.subtype).toBe("Main");
+  });
+
+  it("marks primary-character summaries as Main even without the word protagonist", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "Marcus POV",
+      text: "Marcus hunts Louis at The Warm Hearth.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Marcus Day",
+          category: "character",
+          summary: [
+            "## Core Status",
+            "- On-page primary character; bounty hunter",
+            "",
+            "## Identity",
+            "- Male, bounty hunter",
+            "",
+            "## Physical Description",
+            "- Green eyes",
+          ].join("\n"),
+          isStub: false,
+          aliases: ["Marcus"],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Marcus Day"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const marcus = listEntities().find(
+      (entity) => entity.name === "Marcus Day",
+    );
+
+    expect(marcus?.subtype).toBe("Main");
+  });
+
+  it("marks likely provider POV characters as Main even when the provider omits primary wording", () => {
+    const chapterText = [
+      "Marcus Day took a last hard drag on his cigarette and the embers gleamed in his green eyes.",
+      "He only smoked when he was stressed.",
+      "He dropped the butt on the concrete next to his brown leather boot.",
+      "Marcus knew all of it was a front, though.",
+      "Marcus wanted another cigarette.",
+      "He rubbed his thinly bearded cheeks and took a deep breath.",
+      "The dark-brown Stetson brim was pulled low enough to obscure his face.",
+      "Marcus removed his hat later inside the tavern.",
+      "He knew Claudia would tell him he was being stubborn again.",
+      "Marcus said nothing when Austin Moon took position by the bar.",
+    ].join(" ");
+    const chapter = upsertChapter({
+      number: 1,
+      title: "Marcus POV",
+      text: chapterText,
+    });
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: [
+              "## Core Status",
+              "- On-page character",
+              "- Bounty hunter",
+              "",
+              "## Identity",
+              "- Male",
+              "- Married to Claudia",
+              "",
+              "## Physical Description",
+              "- Green eyes",
+              "- Dark-brown Stetson hat",
+            ].join("\n"),
+            isStub: false,
+            aliases: ["Marcus"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: ["Marcus Day"],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const marcusNormalized = normalized.entities.find(
+      (entity) => entity.name === "Marcus Day",
+    );
+
+    expect(marcusNormalized?.summary).toContain(
+      "Point-of-view character in current chapter snapshot",
+    );
+
+    reconcileCanon(chapter.id, normalized);
+
+    const marcus = listEntities().find(
+      (entity) => entity.name === "Marcus Day",
+    );
+
+    expect(marcus?.subtype).toBe("Main");
   });
 
   it("promotes concise but descriptive one-sentence dossiers", () => {

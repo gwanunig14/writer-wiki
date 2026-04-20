@@ -1,6 +1,5 @@
 import type { ChapterRecord } from "$lib/types/domain";
 import { browser } from "$app/environment";
-import { invalidate } from "$app/navigation";
 import { get, writable } from "svelte/store";
 
 type EditableChapter = {
@@ -37,6 +36,7 @@ async function refreshShellData() {
     return;
   }
 
+  const { invalidate } = await import("$app/navigation");
   await invalidate("app:shell");
 }
 

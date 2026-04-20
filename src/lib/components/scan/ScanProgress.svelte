@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onMount } from "svelte";
 
   const stageOrder = [
     "queued",
@@ -74,13 +74,15 @@
   let now = Date.now();
   let pulseFrame = 0;
 
-  const timer = window.setInterval(() => {
-    now = Date.now();
-    pulseFrame = (pulseFrame + 1) % 4;
-  }, 1000);
+  onMount(() => {
+    const timer = window.setInterval(() => {
+      now = Date.now();
+      pulseFrame = (pulseFrame + 1) % 4;
+    }, 1000);
 
-  onDestroy(() => {
-    window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+    };
   });
 
   function getStageIndex(status: string) {

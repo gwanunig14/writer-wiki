@@ -21,6 +21,8 @@
   let dismissingWatchlistId: string | null = null;
   let continuityError: string | null = null;
 
+  const characterFolderOptions = ["Main", "Major", "Minor"];
+
   $: renderedBody = markdown.render(page.body || "_No canon content yet._");
   $: if (page.editableEntity) {
     draftName = page.editableEntity.name;
@@ -32,6 +34,13 @@
     mergeIntoName = "";
     saveError = null;
     editing = false;
+  }
+
+  $: if (
+    draftCategory === "character" &&
+    !characterFolderOptions.includes(draftFolderPath)
+  ) {
+    draftFolderPath = "Minor";
   }
 
   async function saveDossier() {
@@ -174,11 +183,24 @@
       </label>
       <label>
         <span>Folder Path Override</span>
-        <input
-          bind:value={draftFolderPath}
-          disabled={saving || suppress}
-          placeholder="Main / Major / Vistana / Artifacts"
-        />
+        {#if draftCategory === "character"}
+          <select bind:value={draftFolderPath} disabled={saving || suppress}>
+            {#each characterFolderOptions as option}
+              <option value={option}>{option}</option>
+            {/each}
+          </select>
+          <small class="field-hint">
+            Main is reserved for POV and lead characters. Major requires
+            appearances in two or more chapters. Minor is everyone else unless
+            you override it.
+          </small>
+        {:else}
+          <input
+            bind:value={draftFolderPath}
+            disabled={saving || suppress}
+            placeholder="Main / Major / Vistana / Artifacts"
+          />
+        {/if}
       </label>
       {#if draftCategory === "location"}
         <label>
@@ -413,6 +435,14 @@
   .error {
     margin: 0;
     color: #a13d2d;
+  }
+
+  .field-hint {
+    display: block;
+    margin-top: 0.2rem;
+    color: #6b614f;
+    font-size: 0.85rem;
+    line-height: 1.35;
   }
 
   .aliases {
