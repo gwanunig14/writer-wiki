@@ -665,6 +665,43 @@ describe("scan pipeline", () => {
     ).toBe(true);
   });
 
+  it("classifies possessive whiskey brands as items, not locations", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Brifford",
+            category: "location",
+            summary: "Mentioned in the chapter.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Marcus ordered the second cheapest whiskey, because the cheapest, Brifford's, was only suitable for leather polish.",
+    );
+
+    expect(normalized.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Brifford",
+          category: "item",
+        }),
+      ]),
+    );
+  });
+
   it("reclassifies ship-like provider locations as vehicle items", () => {
     mkdirSync(join(testRoot, "project-data", "system"), { recursive: true });
     writeFileSync(
@@ -3351,6 +3388,114 @@ describe("scan pipeline", () => {
     );
 
     expect(marcus?.isStub).toBe(false);
+  });
+
+  it("clears stale reverse location parent edges before applying scanned parents", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "Location hierarchy repair",
+      text: "Finch Street sits within Kinburgh.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Kinburgh",
+          category: "location",
+          summary: "A city.",
+          isStub: false,
+          aliases: [],
+          links: [],
+          parentLocationName: null,
+        },
+        {
+          name: "Finch Street",
+          category: "location",
+          summary: "A street in Kinburgh.",
+          isStub: false,
+          aliases: [],
+          links: [],
+          parentLocationName: null,
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Kinburgh", "Finch Street"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const db = getDatabase();
+    const ids = db
+      .prepare("SELECT name, id FROM entities WHERE name IN (?, ?)")
+      .all("Kinburgh", "Finch Street") as Array<{ name: string; id: string }>;
+    const kinburghId = ids.find((row) => row.name === "Kinburgh")?.id;
+    const finchStreetId = ids.find((row) => row.name === "Finch Street")?.id;
+
+    expect(kinburghId).toBeDefined();
+    expect(finchStreetId).toBeDefined();
+
+    // Seed a stale inverse edge from older reconciliation behavior.
+    db.prepare("UPDATE entities SET parent_entity_id = ? WHERE id = ?").run(
+      finchStreetId,
+      kinburghId,
+    );
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Kinburgh",
+          category: "location",
+          summary: "A city.",
+          isStub: false,
+          aliases: [],
+          links: [],
+          parentLocationName: null,
+        },
+        {
+          name: "Finch Street",
+          category: "location",
+          summary: "A street in Kinburgh.",
+          isStub: false,
+          aliases: [],
+          links: [],
+          parentLocationName: "Kinburgh",
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: [],
+        articlesUpdated: ["Kinburgh", "Finch Street"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const updatedHierarchy = db
+      .prepare(
+        `SELECT e.name, p.name AS parent
+           FROM entities e
+           LEFT JOIN entities p ON p.id = e.parent_entity_id
+          WHERE e.name IN (?, ?)
+          ORDER BY e.name`,
+      )
+      .all("Finch Street", "Kinburgh") as Array<{
+      name: string;
+      parent: string | null;
+    }>;
+
+    expect(updatedHierarchy).toEqual([
+      { name: "Finch Street", parent: "Kinburgh" },
+      { name: "Kinburgh", parent: null },
+    ]);
   });
 
   it("preserves inferred Main characters across later rescans", () => {

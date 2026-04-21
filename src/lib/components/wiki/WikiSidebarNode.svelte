@@ -2,9 +2,17 @@
   import type { WikiNode } from "$lib/types/domain";
 
   export let node: WikiNode;
+  export let parentLabel: string | null = null;
 
   $: hasChildren = Boolean(node.children?.length);
-  let expanded = true;
+  $: isFolderDossier =
+    node.kind === "article" &&
+    parentLabel !== null &&
+    node.label.localeCompare(parentLabel, undefined, {
+      sensitivity: "base",
+    }) === 0;
+  $: displayLabel = isFolderDossier ? node.label : node.label;
+  let expanded = false;
 </script>
 
 <li class:has-children={hasChildren}>
@@ -24,8 +32,8 @@
     {/if}
 
     {#if node.href}
-      <a class="node-link" href={node.href}
-        >{node.label}{node.isStub ? " (stub)" : ""}</a
+      <a class="node-link" class:dossier-link={isFolderDossier} href={node.href}
+        >{displayLabel}{node.isStub ? " (stub)" : ""}</a
       >
     {:else}
       <span class="folder-label">{node.label}</span>
@@ -35,7 +43,7 @@
   {#if hasChildren && expanded}
     <ul class="nested">
       {#each node.children as child}
-        <svelte:self node={child} />
+        <svelte:self node={child} parentLabel={node.label} />
       {/each}
     </ul>
   {/if}
@@ -86,6 +94,10 @@
 
   .node-link:hover {
     text-decoration: underline;
+  }
+
+  .dossier-link {
+    font-weight: 700;
   }
 
   .folder-label {

@@ -33,6 +33,12 @@ export async function POST({ params, request }) {
     });
   }
 
-  const scanJob = startChapterScan(params.id);
+  let scanJob;
+  try {
+    scanJob = startChapterScan(params.id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Scan failed.";
+    throw error(400, message);
+  }
   return json(scanJob, { status: 202 });
 }

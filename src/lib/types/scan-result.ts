@@ -17,6 +17,7 @@ export const scanEntitySchema = z.object({
   name: z.string().min(1),
   category: z.enum(["character", "location", "item", "organization"]),
   itemSubtype: itemSubtypeSchema.optional().nullable(),
+  parentLocationName: z.string().optional().nullable(),
   summary: z.string().min(1),
   isStub: z.boolean(),
   aliases: z.array(z.string()).default([]),

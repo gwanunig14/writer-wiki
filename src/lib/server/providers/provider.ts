@@ -10,6 +10,7 @@ export interface AIProvider {
   scanChapter(input: {
     prompt: string;
     chapterText: string;
+    chapterLabel: string;
     apiKey: string;
   }): Promise<ScanResult>;
   answerCanonQuestion(input: {
@@ -74,7 +75,10 @@ export function formatLogPreview(value: string, maxLength = 400) {
   return `${compact.slice(0, maxLength)}...`;
 }
 
-export function extractDeterministicCanon(chapterText: string): ScanResult {
+export function extractDeterministicCanon(
+  chapterText: string,
+  chapterLabel: string,
+): ScanResult {
   const matches = [
     ...chapterText.matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g),
   ];
@@ -97,23 +101,23 @@ export function extractDeterministicCanon(chapterText: string): ScanResult {
       summary: [
         "## Core Status",
         `- Canon status: Unconfirmed`,
-        `- On-page status: Mentioned only in the current chapter snapshot`,
+        `- On-page status: Mentioned in ${chapterLabel}`,
         "",
         "## Identity",
         "- Occupation / function: Missing",
         "- Affiliation(s): Missing",
         "",
         "## Physical Description",
-        "- Missing / unestablished: No supported physical description is available in the current chapter snapshot.",
+        `- Missing / unestablished: No supported physical description is available in ${chapterLabel}.`,
         "",
         "## Role in Current Canon",
-        `- ${name} is named in the current chapter snapshot, but supporting details remain thin.`,
+        `- ${name} is named in ${chapterLabel}, but supporting details remain thin.`,
         "",
         "## Open Questions / Continuity Risks",
         "- Missing: identity, role, and relationship details require later confirmation.",
         "",
         "## Sources",
-        "- Source: Current chapter snapshot",
+        `- Source: ${chapterLabel}`,
       ].join("\n"),
       isStub: true,
       aliases: [],
@@ -129,13 +133,13 @@ export function extractDeterministicCanon(chapterText: string): ScanResult {
     entities,
     chronology: [
       {
-        label: `Chapter snapshot ${digest}`,
+        label: `${chapterLabel} snapshot ${digest}`,
         body: [
-          "- Event: A saved chapter snapshot was scanned and reconciled against the current canon.",
+          `- Event: ${chapterLabel} was scanned and reconciled against the current canon.`,
           "- Location: Missing",
           `- Characters involved: ${entities.length ? entities.map((entity) => entity.name).join(", ") : "None clearly established"}`,
-          "- Consequences: Canon records were refreshed from the saved snapshot.",
-          "- Sources: Current chapter snapshot",
+          `- Consequences: Canon records were refreshed from ${chapterLabel}.`,
+          `- Sources: ${chapterLabel}`,
         ].join("\n"),
         confidence: "confirmed",
       },
@@ -145,7 +149,7 @@ export function extractDeterministicCanon(chapterText: string): ScanResult {
       articlesCreated: entities.map((entity) => entity.name),
       articlesUpdated: [],
       stubsCreated: entities.map((entity) => entity.name),
-      chronologyUpdated: [`Chapter snapshot ${digest}`],
+      chronologyUpdated: [`${chapterLabel} snapshot ${digest}`],
       continuityUpdated: [],
       contradictionsFlagged: [],
     },

@@ -21,6 +21,13 @@ import { normalizeScanResult } from "./normalize-scan-result";
 import { reconcileCanon } from "./reconcile-canon";
 import { markLaterAffectedChaptersStale } from "./rescan-propagation";
 import { getScanContext } from "./scan-context";
+
+function formatChapterLabel(number: number | null, title: string) {
+  if (number !== null && title.trim().toLowerCase() === `chapter ${number}`) {
+    return `Chapter ${number}`;
+  }
+  return number === null ? `Draft: ${title}` : `Chapter ${number}: ${title}`;
+}
 import { regenerateProjectFiles } from "$lib/server/sync/projector";
 
 const runningJobs = new Map<string, Promise<void>>();
@@ -128,6 +135,7 @@ async function runScanJob(scanJobId: string) {
     const rawResult = await provider.scanChapter({
       prompt,
       chapterText: chapterVersion.text,
+      chapterLabel: formatChapterLabel(chapter.number ?? null, chapter.title),
       apiKey,
     });
     addScanArtifact(scanJobId, "raw-provider-response", rawResult);

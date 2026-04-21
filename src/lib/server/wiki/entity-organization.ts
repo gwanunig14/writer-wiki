@@ -169,6 +169,41 @@ function inferOrganizationSegments(entity: EntitySummaryRecord) {
   return ["General"];
 }
 
+/**
+ * Check if assigning `parentId` as the parent of `childId` would create a cycle
+ * in the parent chain. Returns true if a cycle would be created, false otherwise.
+ */
+function wouldCreateCycle(
+  childId: string,
+  parentId: string,
+  parentById: Map<string, string>,
+): boolean {
+  if (childId === parentId) {
+    return true; // Direct self-loop
+  }
+
+  let current = parentId;
+  const visited = new Set<string>();
+
+  while (current) {
+    if (visited.has(current)) {
+      // We've entered a cycle in the existing parentById map; this is fine,
+      // we're just checking whether adding the edge would create one.
+      break;
+    }
+
+    if (current === childId) {
+      // Found a path back to childId; assigning parentId would create a cycle
+      return true;
+    }
+
+    visited.add(current);
+    current = parentById.get(current);
+  }
+
+  return false;
+}
+
 function inferLocationParents(locations: EntitySummaryRecord[]) {
   const parentById = new Map<string, string>();
 
@@ -208,7 +243,7 @@ function inferLocationParents(locations: EntitySummaryRecord[]) {
       }
       if (
         new RegExp(
-          `\\b(?:in|within|inside|at|of|from|near|outside|overlooking)\\s+${candidateName.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`,
+          `\\b(?:in|within|inside|at)\\s+${candidateName.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`,
           "i",
         ).test(text)
       ) {
@@ -225,7 +260,66 @@ function inferLocationParents(locations: EntitySummaryRecord[]) {
     }
 
     if (bestMatch) {
-      parentById.set(entity.id, bestMatch.id);
+      // Guard against cycles: do not assign a parent if that parent eventually
+      // points back to this entity through the parent chain (either in the inferred
+      // map or via the DB parentEntityId field).
+      if (!wouldCreateCycle(entity.id, bestMatch.id, parentById)) {
+        parentById.set(entity.id, bestMatch.id);
+      }
+    }
+  }
+
+  // Second pass: sibling-parent inheritance.
+  // If entity C has no direct-evidence parent yet, but its article body mentions
+  // entity B (any co-location reference), and B has an assigned parent P, then
+  // C likely shares that regional parent. This captures "C is near B, B is in P,
+  // so C is also in P" when the text signal exists in the article body.
+  const byId = new Map(locations.map((loc) => [loc.id, loc]));
+  for (const entity of locations) {
+    if (parentById.has(entity.id)) {
+      continue; // already has a direct-evidence parent
+    }
+    const text = entity.articleBody.toLowerCase();
+    let bestSiblingMatch: { id: string; score: number } | null = null;
+
+    for (const sibling of locations) {
+      if (sibling.id === entity.id) {
+        continue;
+      }
+      const siblingParentId = parentById.get(sibling.id);
+      if (!siblingParentId) {
+        continue; // sibling has no parent to inherit
+      }
+      const siblingParent = byId.get(siblingParentId);
+      if (!siblingParent) {
+        continue;
+      }
+      // Only inherit from siblings whose inferred parent is a broader region
+      // (i.e., the parent has fewer name tokens than the sibling — avoids
+      // inheriting from a building's room, etc.)
+      const siblingTokens = sibling.name.split(/\s+/).filter(Boolean).length;
+      const parentTokens = siblingParent.name
+        .split(/\s+/)
+        .filter(Boolean).length;
+      if (parentTokens >= siblingTokens) {
+        continue;
+      }
+      const siblingNameEscaped = sibling.name
+        .toLowerCase()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`\\b${siblingNameEscaped}\\b`).test(text)) {
+        const score = 60;
+        if (!bestSiblingMatch || score > bestSiblingMatch.score) {
+          bestSiblingMatch = { id: siblingParentId, score };
+        }
+      }
+    }
+
+    if (bestSiblingMatch) {
+      // Also guard the sibling inheritance to avoid cycles
+      if (!wouldCreateCycle(entity.id, bestSiblingMatch.id, parentById)) {
+        parentById.set(entity.id, bestSiblingMatch.id);
+      }
     }
   }
 
@@ -350,8 +444,41 @@ export function buildCategoryTreeNodes(
     container.push(createArticleNode(entity));
   }
 
-  function sortNodes(nodes: WikiNode[]) {
+  function sortNodes(nodes: WikiNode[], parentLabel?: string) {
     nodes.sort((left, right) => {
+      if (category === "location") {
+        const leftIsLocationUncertain =
+          left.kind === "folder" &&
+          left.label.localeCompare("Location uncertain", undefined, {
+            sensitivity: "base",
+          }) === 0;
+        const rightIsLocationUncertain =
+          right.kind === "folder" &&
+          right.label.localeCompare("Location uncertain", undefined, {
+            sensitivity: "base",
+          }) === 0;
+        if (leftIsLocationUncertain !== rightIsLocationUncertain) {
+          return leftIsLocationUncertain ? 1 : -1;
+        }
+      }
+
+      if (category === "location" && parentLabel) {
+        const leftIsDossier =
+          left.kind === "article" &&
+          left.label.localeCompare(parentLabel, undefined, {
+            sensitivity: "base",
+          }) === 0;
+        const rightIsDossier =
+          right.kind === "article" &&
+          right.label.localeCompare(parentLabel, undefined, {
+            sensitivity: "base",
+          }) === 0;
+
+        if (leftIsDossier !== rightIsDossier) {
+          return leftIsDossier ? -1 : 1;
+        }
+      }
+
       if (
         category === "character" &&
         left.kind === "folder" &&
@@ -377,7 +504,7 @@ export function buildCategoryTreeNodes(
 
     for (const node of nodes) {
       if (node.children) {
-        sortNodes(node.children);
+        sortNodes(node.children, node.label);
       }
     }
   }

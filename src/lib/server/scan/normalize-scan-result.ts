@@ -1468,6 +1468,11 @@ function mergeAppositiveLocationEntities(
   });
 }
 
+// Single-word sentence-transition words that are never location names.
+// Covers adverbs ending in -ly plus common discourse markers.
+const sentenceTransitionPattern =
+  /^(?:finally|eventually|suddenly|meanwhile|previously|fortunately|unfortunately|lastly|firstly|next|then|also|moreover|however|therefore|otherwise|additionally|consequently|subsequently|indeed|still|yet|now|so|thus|hence|instead|perhaps|certainly|clearly|obviously|similarly|alternatively|notably|meanwhile|admittedly|frankly|honestly|naturally|obviously|presumably|reportedly|supposedly)$/i;
+
 function findAppositiveLocationCanonicalName(name: string, context: string) {
   const strippedName = stripLeadingArticle(sanitizeMatchedName(name));
   if (!strippedName || !context) {
@@ -1488,7 +1493,19 @@ function findAppositiveLocationCanonicalName(name: string, context: string) {
   for (const pattern of patterns) {
     const match = pattern.exec(context);
     if (match?.[1]) {
-      return sanitizeMatchedName(match[1]);
+      const candidate = sanitizeMatchedName(match[1]);
+      // Reject single-word sentence-transition adverbs that appear at the
+      // start of a sentence and are never location names (e.g. "Finally, the
+      // Red Booth" should not yield "Finally" as the canonical location name).
+      const tokens = candidate.split(/\s+/).filter(Boolean);
+      if (
+        tokens.length === 1 &&
+        (sentenceTransitionPattern.test(candidate) ||
+          /^[A-Z][a-z]+ly$/i.test(candidate))
+      ) {
+        continue;
+      }
+      return candidate;
     }
   }
 
@@ -2446,6 +2463,10 @@ function inferItemSubtype(name: string, context: string) {
     return "Plants" as const;
   }
 
+  if (hasBeverageContext(name, context)) {
+    return "Other" as const;
+  }
+
   return null;
 }
 
@@ -2550,6 +2571,31 @@ function hasVehicleContext(name: string, context: string) {
     ).test(context) ||
     new RegExp(
       `\bsister\s+ship\b[^.\n]{0,20}\b${escapedName}\b|\b${escapedName}\b[^.\n]{0,20}\bsister\s+ship\b`,
+      "i",
+    ).test(context)
+  );
+}
+
+function hasBeverageContext(name: string, context: string) {
+  if (!name || !context) {
+    return false;
+  }
+
+  const escapedName = escapeRegExp(name);
+  const beverageNouns =
+    "whiskey|whisky|bourbon|scotch|brandy|rum|gin|vodka|ale|beer|mead|wine|liquor|spirits?|cocktails?|drinks?";
+
+  return (
+    new RegExp(
+      `\\b${escapedName}['’]s\\b[^.\\n]{0,24}\\b(?:${beverageNouns})\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:${beverageNouns})\\b[^.\\n]{0,24}\\b${escapedName}['’]s\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b${escapedName}\\b[^.\\n]{0,24}\\b(?:${beverageNouns})\\b`,
       "i",
     ).test(context)
   );
@@ -2747,6 +2793,10 @@ function inferCategory(
   }
 
   if (hasPublicationOrWorkContext(name, context)) {
+    return "item";
+  }
+
+  if (hasBeverageContext(name, context)) {
     return "item";
   }
 
@@ -3011,6 +3061,9 @@ function normalizeProviderEntity(
   const vehicleContext =
     hasVehicleContext(normalizedEntity.name, match?.snippet ?? "") ||
     hasVehicleContext(normalizedEntity.name, chapterText);
+  const beverageContext =
+    hasBeverageContext(normalizedEntity.name, match?.snippet ?? "") ||
+    hasBeverageContext(normalizedEntity.name, chapterText);
   const namedAnimalContext =
     isNamedAnimalReference(normalizedEntity.name, match?.snippet ?? "") ||
     isNamedAnimalReference(normalizedEntity.name, chapterText);
@@ -3053,6 +3106,20 @@ function normalizeProviderEntity(
       ...normalizedEntity,
       category: "item",
       itemSubtype: normalizedEntity.itemSubtype ?? "Vehicles",
+    });
+  }
+
+  if (
+    beverageContext &&
+    !strongHumanContext &&
+    normalizedEntity.category !== "character"
+  ) {
+    return applyUserCanonDecisionToEntity({
+      ...normalizedEntity,
+      category: "item",
+      itemSubtype:
+        normalizedEntity.itemSubtype ??
+        inferItemSubtype(normalizedEntity.name, chapterText),
     });
   }
 
@@ -3123,7 +3190,24 @@ function normalizeProviderEntity(
     return applyUserCanonDecisionToEntity(normalizedEntity);
   }
 
-  if (inferredCategory && inferredCategory !== normalizedEntity.category) {
+  // For single-word names, only override the API's category if there is
+  // chapter-wide strong evidence for the inferred category. A single-snippet
+  // inference is not reliable enough to outweigh what the API returned.
+  // Multi-word names have sufficient morphological signal to rely on inference.
+  const isSingleWordName = normalizedEntity.name.split(/\s+/).length === 1;
+  const inferredCategoryHasStrongSupport =
+    !isSingleWordName ||
+    hasChapterWideSingleWordEvidence(
+      normalizedEntity.name,
+      inferredCategory!,
+      chapterText,
+    );
+
+  if (
+    inferredCategory &&
+    inferredCategory !== normalizedEntity.category &&
+    inferredCategoryHasStrongSupport
+  ) {
     return applyUserCanonDecisionToEntity({
       ...normalizedEntity,
       category: inferredCategory,
@@ -3994,6 +4078,27 @@ export function normalizeScanResult(
   chapterText = "",
 ): ScanResult {
   const parsed = scanResultSchema.parse(input);
+
+  // Build slug-keyed lookups from the raw parsed output so that fields which
+  // survive the model response can be restored onto final entities even if
+  // the normalisation pipeline drops or replaces the originating entity object
+  // (e.g. when expandEntityNameFromChapterContext produces a long form that
+  // fails the grounding check, causing a supplemental stub to be injected).
+  const parentLocationBySlug = new Map<string, string | null>();
+  const linksBySlug = new Map<
+    string,
+    ScanResult["entities"][number]["links"]
+  >();
+  for (const entity of parsed.entities) {
+    const slug = makeSlug(entity.name);
+    if (entity.category === "location" && "parentLocationName" in entity) {
+      parentLocationBySlug.set(slug, entity.parentLocationName ?? null);
+    }
+    if (entity.links.length > 0) {
+      linksBySlug.set(slug, entity.links);
+    }
+  }
+
   const existingEntitySlugs = getExistingEntitySlugs();
   const seen = new Set<string>();
 
@@ -4158,6 +4263,28 @@ export function normalizeScanResult(
 
   return {
     ...parsed,
-    entities: mergeCanonicalDuplicateEntities(finalEntities),
+    entities: mergeCanonicalDuplicateEntities(finalEntities).map((entity) => {
+      const slug = makeSlug(entity.name);
+      let result = entity;
+
+      // Restore parentLocationName if it was lost during normalization passes.
+      if (entity.category === "location" && !("parentLocationName" in entity)) {
+        const pln = parentLocationBySlug.get(slug);
+        if (pln !== undefined) {
+          result = { ...result, parentLocationName: pln };
+        }
+      }
+
+      // Restore links if the normalization pipeline dropped them (e.g. when the
+      // original provider entity was replaced by a supplemental stub with links: []).
+      if (result.links.length === 0) {
+        const restored = linksBySlug.get(slug);
+        if (restored && restored.length > 0) {
+          result = { ...result, links: restored };
+        }
+      }
+
+      return result;
+    }),
   };
 }
