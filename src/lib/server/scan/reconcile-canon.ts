@@ -308,17 +308,102 @@ function normalizeAliasValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+const characterHonorificPattern =
+  "mr|mrs|ms|miss|captain|sir|lady|lord|baron|baroness|prince|princess|duke|duchess|king|queen|emperor|empress|doctor|dr|professor|master|aunt|uncle";
+
+function stripCharacterHonorific(name: string) {
+  return normalizeAliasValue(name)
+    .replace(new RegExp(`^(?:${characterHonorificPattern})\\.?\\s+`, "i"), "")
+    .trim();
+}
+
+function getLeadingCharacterHonorific(name: string) {
+  const match = normalizeAliasValue(name).match(
+    new RegExp(`^(${characterHonorificPattern})\\.?\\s+`, "i"),
+  );
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function hasNonMissingCharacterDetailSection(summary: string) {
+  return summary
+    .split(/\n(?=##\s+)/)
+    .some(
+      (section) =>
+        /^##\s+(?:Identity|Physical Description|Description|Function in Story)\b/i.test(
+          section,
+        ) &&
+        section
+          .split("\n")
+          .some(
+            (line) =>
+              /^\s*-\s+/.test(line) &&
+              !/:\s*Missing\s*$/i.test(line) &&
+              !/\bMissing\b/i.test(line),
+          ),
+    );
+}
+
+function hasUnsupportedPovOnlySummary(summary: string) {
+  const text = summary.toLowerCase();
+
+  return (
+    /\b(?:primary pov|point-of-view|point of view|pov)\b/.test(text) &&
+    !/\b(?:protagonist|main character|lead character|primary character|on-page primary character)\b/.test(
+      text,
+    ) &&
+    ((summary.match(/\bmissing\b/gi)?.length ?? 0) >= 2 ||
+      /\b(?:canon status:\s*unconfirmed|mentioned or on-page|rumor|rumors|claimed|alleged|supposed)\b/.test(
+        text,
+      )) &&
+    !hasNonMissingCharacterDetailSection(summary)
+  );
+}
+
+function stripUnsupportedPointOfViewLines(summary: string) {
+  return summary
+    .split("\n")
+    .filter(
+      (line) =>
+        !/\b(?:protagonist|main character|lead character|primary character|on-page primary character|primary pov|point-of-view|point of view|pov)\b/i.test(
+          line,
+        ),
+    )
+    .join("\n")
+    .trim();
+}
+
 function inferEntitySubtype(entity: ScanResult["entities"][number]) {
+  if (entity.category === "item") {
+    return entity.itemSubtype ?? null;
+  }
+
   if (entity.category !== "character") {
     return null;
   }
 
   const text = `${entity.name} ${entity.summary}`.toLowerCase();
+  const hasExplicitPrimaryCue =
+    /\b(?:protagonist|main character|lead character|primary character|on-page primary character)\b/.test(
+      text,
+    );
+  const hasPovCue = /\b(?:primary pov|point-of-view|point of view|pov)\b/.test(
+    text,
+  );
+  const appearsNonHuman =
+    /\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/.test(
+      text,
+    );
+  const hasSubstantiveEvidence =
+    !entity.isStub ||
+    normalizeEntityEvidence(entity.summary, entity.isStub).isStub === false;
+  const hasUnsupportedThinPovSummary = hasUnsupportedPovOnlySummary(
+    entity.summary,
+  );
 
   if (
-    /\b(?:protagonist|main character|lead character|primary character|primary pov|on-page primary character|point-of-view|point of view|pov)\b/.test(
-      text,
-    )
+    hasSubstantiveEvidence &&
+    !appearsNonHuman &&
+    (hasExplicitPrimaryCue || (hasPovCue && !hasUnsupportedThinPovSummary))
   ) {
     return "Main";
   }
@@ -329,6 +414,10 @@ function inferEntitySubtype(entity: ScanResult["entities"][number]) {
 function buildWatchOrganizationAliases(name: string) {
   const normalizedName = normalizeAliasValue(name);
   const articleStripped = stripLeadingArticle(normalizedName);
+
+  if (/^City Watchmen$/i.test(articleStripped)) {
+    return ["The City Watch", "City Watch", "The Watch", "Watch"];
+  }
 
   if (
     !/^(?:City Watch|Watch)$/i.test(articleStripped) ||
@@ -368,6 +457,10 @@ function scoreCanonicalName(
     score += 25;
   }
 
+  if (category === "organization" && /Watchmen$/i.test(articleStripped)) {
+    score -= 25;
+  }
+
   if (
     category === "character" &&
     /\b(King|Queen|Prince|Princess|Duke|Duchess|Emperor|Empress)\b/i.test(
@@ -381,9 +474,7 @@ function scoreCanonicalName(
 }
 
 function startsWithHonorific(name: string) {
-  return /^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i.test(
-    normalizeAliasValue(name),
-  );
+  return stripCharacterHonorific(name) !== normalizeAliasValue(name);
 }
 
 function endsWithUncertainCharacterSuffix(name: string) {
@@ -391,19 +482,14 @@ function endsWithUncertainCharacterSuffix(name: string) {
 }
 
 function getCharacterSurname(name: string) {
-  const stripped = normalizeAliasValue(name)
-    .replace(/^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i, "")
-    .trim();
+  const stripped = stripCharacterHonorific(name);
   const tokens = stripped.split(/\s+/).filter(Boolean);
   return tokens.length ? tokens[tokens.length - 1].toLowerCase() : "";
 }
 
 function isHonorificSurnameVariant(name: string) {
   const normalized = normalizeAliasValue(name);
-  const stripped = normalized.replace(
-    /^(?:mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i,
-    "",
-  );
+  const stripped = stripCharacterHonorific(name);
   const originalTokens = normalized.split(/\s+/).filter(Boolean);
   const strippedTokens = stripped.split(/\s+/).filter(Boolean);
 
@@ -427,6 +513,29 @@ function chooseCanonicalEntityName(
   }
 
   if (category === "character") {
+    const existingTokens = stripCharacterHonorific(normalizedExisting)
+      .split(/\s+/)
+      .filter(Boolean);
+    const incomingTokens = stripCharacterHonorific(normalizedIncoming)
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (
+      existingTokens.length === 1 &&
+      incomingTokens.length > 1 &&
+      incomingTokens[0]?.toLowerCase() === existingTokens[0]?.toLowerCase()
+    ) {
+      return normalizedIncoming;
+    }
+
+    if (
+      incomingTokens.length === 1 &&
+      existingTokens.length > 1 &&
+      existingTokens[0]?.toLowerCase() === incomingTokens[0]?.toLowerCase()
+    ) {
+      return normalizedExisting;
+    }
+
     if (
       endsWithUncertainCharacterSuffix(normalizedExisting) &&
       !endsWithUncertainCharacterSuffix(normalizedIncoming)
@@ -466,6 +575,64 @@ function chooseCanonicalEntityName(
     return normalizedExisting;
   }
 
+  if (category === "organization") {
+    const existingBase = stripLeadingArticle(normalizedExisting).replace(
+      /\bWatchmen$/i,
+      "Watch",
+    );
+    const incomingBase = stripLeadingArticle(normalizedIncoming).replace(
+      /\bWatchmen$/i,
+      "Watch",
+    );
+
+    if (existingBase.toLowerCase() === incomingBase.toLowerCase()) {
+      if (
+        /Watchmen$/i.test(normalizedExisting) &&
+        !/Watchmen$/i.test(normalizedIncoming)
+      ) {
+        return normalizedIncoming;
+      }
+
+      if (
+        /Watchmen$/i.test(normalizedIncoming) &&
+        !/Watchmen$/i.test(normalizedExisting)
+      ) {
+        return normalizedExisting;
+      }
+    }
+  }
+
+  if (category === "location") {
+    const existingTokens = stripLeadingArticle(normalizedExisting)
+      .split(/\s+/)
+      .filter(Boolean);
+    const incomingTokens = stripLeadingArticle(normalizedIncoming)
+      .split(/\s+/)
+      .filter(Boolean);
+    const descriptiveBuildingSuffixPattern =
+      /^(?:Manor|House|Hall|Keep|Castle|Tower|Inn|Tavern)$/i;
+
+    if (
+      existingTokens.length === 1 &&
+      incomingTokens.length > 1 &&
+      descriptiveBuildingSuffixPattern.test(
+        incomingTokens[incomingTokens.length - 1] ?? "",
+      )
+    ) {
+      return normalizedExisting;
+    }
+
+    if (
+      incomingTokens.length === 1 &&
+      existingTokens.length > 1 &&
+      descriptiveBuildingSuffixPattern.test(
+        existingTokens[existingTokens.length - 1] ?? "",
+      )
+    ) {
+      return normalizedIncoming;
+    }
+  }
+
   return [normalizedExisting, normalizedIncoming].sort((left, right) => {
     const scoreDifference =
       scoreCanonicalName(right, category) - scoreCanonicalName(left, category);
@@ -481,6 +648,10 @@ function buildImplicitAliases(entity: ScanResult["entities"][number]) {
   const aliases = new Set<string>();
   const normalizedName = normalizeAliasValue(entity.name);
   const withoutArticle = stripLeadingArticle(normalizedName);
+  const itemPossessiveOwnerMatch =
+    entity.category === "item"
+      ? normalizedName.match(/^(.+?)['’]s\s+\S/)
+      : null;
 
   if (withoutArticle && withoutArticle !== normalizedName) {
     aliases.add(withoutArticle);
@@ -535,12 +706,183 @@ function buildImplicitAliases(entity: ScanResult["entities"][number]) {
   for (const alias of entity.aliases) {
     const normalizedAlias = normalizeAliasValue(alias);
     if (normalizedAlias) {
+      if (
+        itemPossessiveOwnerMatch &&
+        normalizedAlias.toLowerCase() ===
+          itemPossessiveOwnerMatch[1].toLowerCase()
+      ) {
+        continue;
+      }
       aliases.add(normalizedAlias);
     }
   }
 
   aliases.delete(normalizedName);
   return [...aliases];
+}
+
+function findPreferredCharacterMergeMatch(
+  entity: ScanResult["entities"][number],
+) {
+  if (entity.category !== "character") {
+    return undefined;
+  }
+
+  const db = getDatabase();
+
+  if (isHonorificSurnameVariant(entity.name)) {
+    const surname = getCharacterSurname(entity.name);
+    if (surname) {
+      const surnameMatches = db
+        .prepare(
+          `SELECT *
+             FROM entities
+            WHERE category = 'character'
+              AND lower(name) != lower(?)
+              AND lower(name) LIKE ?`,
+        )
+        .all(entity.name, `%${surname}`) as Array<Record<string, unknown>>;
+
+      const exactSurnameMatches = surnameMatches.filter((candidate) => {
+        const candidateSurname = getCharacterSurname(String(candidate.name));
+        const candidateTokens = normalizeAliasValue(String(candidate.name))
+          .split(/\s+/)
+          .filter(Boolean);
+
+        return candidateSurname === surname && candidateTokens.length >= 2;
+      });
+
+      const honorific = getLeadingCharacterHonorific(entity.name);
+      const honorificMatches = honorific
+        ? exactSurnameMatches.filter((candidate) => {
+            const candidateText =
+              `${String(candidate.name)} ${String(candidate.article_body ?? "")}`.toLowerCase();
+            return new RegExp(`\\b${honorific}\\b`, "i").test(candidateText);
+          })
+        : exactSurnameMatches;
+
+      if (honorificMatches.length === 1) {
+        return honorificMatches[0];
+      }
+
+      if (exactSurnameMatches.length === 1) {
+        return exactSurnameMatches[0];
+      }
+    }
+  }
+
+  const strippedName = stripCharacterHonorific(entity.name);
+  const nameTokens = strippedName.split(/\s+/).filter(Boolean);
+
+  if (nameTokens.length === 1) {
+    const firstName = nameTokens[0].toLowerCase();
+    const fullNameMatches = db
+      .prepare(
+        `SELECT *
+           FROM entities
+          WHERE category = 'character'
+            AND lower(name) != lower(?)`,
+      )
+      .all(entity.name) as Array<Record<string, unknown>>;
+
+    const uniqueMatches = fullNameMatches.filter((candidate) => {
+      const candidateTokens = stripCharacterHonorific(String(candidate.name))
+        .split(/\s+/)
+        .filter(Boolean);
+
+      return (
+        candidateTokens.length > 1 &&
+        candidateTokens[0]?.toLowerCase() === firstName
+      );
+    });
+
+    if (uniqueMatches.length === 1) {
+      return uniqueMatches[0];
+    }
+  }
+
+  return undefined;
+}
+
+function findPreferredOrganizationMergeMatch(
+  entity: ScanResult["entities"][number],
+) {
+  if (entity.category !== "organization") {
+    return undefined;
+  }
+
+  const normalizedName = normalizeAliasValue(entity.name);
+  const entityBase = stripLeadingArticle(normalizedName).replace(
+    /\bWatchmen$/i,
+    "Watch",
+  );
+  if (!/^(?:City Watch|Watch)$/i.test(entityBase)) {
+    return undefined;
+  }
+
+  const db = getDatabase();
+  const matches = db
+    .prepare("SELECT * FROM entities WHERE category = 'organization'")
+    .all() as Array<Record<string, unknown>>;
+
+  const compatibleMatches = matches.filter((candidate) => {
+    const candidateName = normalizeAliasValue(String(candidate.name));
+    if (candidateName.toLowerCase() === normalizedName.toLowerCase()) {
+      return false;
+    }
+
+    const candidateBase = stripLeadingArticle(candidateName).replace(
+      /\bWatchmen$/i,
+      "Watch",
+    );
+    return candidateBase.toLowerCase() === entityBase.toLowerCase();
+  });
+
+  if (compatibleMatches.length > 0) {
+    return compatibleMatches.sort((left, right) => {
+      const rightName = String(right.name);
+      const leftName = String(left.name);
+      const rightScore =
+        scoreCanonicalName(rightName, "organization") +
+        (String(right.slug) === makeSlug(rightName) ? 1000 : 0);
+      const leftScore =
+        scoreCanonicalName(leftName, "organization") +
+        (String(left.slug) === makeSlug(leftName) ? 1000 : 0);
+
+      return rightScore - leftScore;
+    })[0];
+  }
+
+  return undefined;
+}
+
+function shouldPreserveExistingMainSubtype(
+  entity: ScanResult["entities"][number],
+) {
+  if (entity.category !== "character") {
+    return false;
+  }
+
+  const text = `${entity.name} ${entity.summary}`.toLowerCase();
+
+  // Stub entries (alias-only references like "John Burton" for Marcus Day) must
+  // not downgrade an existing Main character's subtype, unless the stub reveals
+  // the character is actually an animal (e.g. "Marcus's horse").
+  if (entity.isStub) {
+    return !/\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/.test(
+      text,
+    );
+  }
+
+  const hasUnsupportedThinPovSummary = hasUnsupportedPovOnlySummary(
+    entity.summary,
+  );
+
+  return (
+    !/\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/.test(
+      text,
+    ) && !hasUnsupportedThinPovSummary
+  );
 }
 
 function findEntityByAliasOrSlug(
@@ -551,6 +893,17 @@ function findEntityByAliasOrSlug(
   const aliasCandidates = [entity.name, ...buildImplicitAliases(entity)]
     .map((value) => normalizeAliasValue(value))
     .filter(Boolean);
+
+  const preferredCharacterMatch = findPreferredCharacterMergeMatch(entity);
+  if (preferredCharacterMatch) {
+    return preferredCharacterMatch;
+  }
+
+  const preferredOrganizationMatch =
+    findPreferredOrganizationMergeMatch(entity);
+  if (preferredOrganizationMatch) {
+    return preferredOrganizationMatch;
+  }
 
   const existingBySlug = db
     .prepare("SELECT * FROM entities WHERE slug = ? LIMIT 1")
@@ -583,38 +936,96 @@ function findEntityByAliasOrSlug(
     }
   }
 
-  if (
-    entity.category === "character" &&
-    isHonorificSurnameVariant(entity.name)
-  ) {
-    const surname = getCharacterSurname(entity.name);
-    if (surname) {
-      const surnameMatches = db
-        .prepare(
-          `SELECT *
-             FROM entities
-            WHERE category = 'character'
-              AND lower(name) != lower(?)
-              AND lower(name) LIKE ?`,
-        )
-        .all(entity.name, `%${surname}`) as Array<Record<string, unknown>>;
+  return undefined;
+}
 
-      const exactSurnameMatches = surnameMatches.filter((candidate) => {
-        const candidateSurname = getCharacterSurname(String(candidate.name));
-        const candidateTokens = normalizeAliasValue(String(candidate.name))
-          .split(/\s+/)
-          .filter(Boolean);
+function pruneRedundantAliases(entityId: string, canonicalName: string) {
+  getDatabase()
+    .prepare(
+      "DELETE FROM entity_aliases WHERE entity_id = ? AND lower(alias) = lower(?)",
+    )
+    .run(entityId, canonicalName);
+}
 
-        return candidateSurname === surname && candidateTokens.length >= 2;
-      });
+function removeOrphanedScanEntities() {
+  const db = getDatabase();
+  const orphanRows = db
+    .prepare(
+      `SELECT id
+         FROM entities
+        WHERE created_from_chapter_id IS NOT NULL
+          AND id NOT IN (
+            SELECT target_id
+              FROM derived_dependencies
+             WHERE target_type = 'entity'
+          )`,
+    )
+    .all() as Array<Record<string, unknown>>;
 
-      if (exactSurnameMatches.length === 1) {
-        return exactSurnameMatches[0];
-      }
-    }
+  for (const row of orphanRows) {
+    const entityId = String(row.id);
+    db.prepare("DELETE FROM entity_aliases WHERE entity_id = ?").run(entityId);
+    db.prepare(
+      "DELETE FROM entity_links WHERE from_entity_id = ? OR to_entity_id = ?",
+    ).run(entityId, entityId);
+    db.prepare("DELETE FROM entities WHERE id = ?").run(entityId);
+  }
+}
+
+function mergeExactNameDuplicateEntities() {
+  const db = getDatabase();
+  const rows = db
+    .prepare(
+      "SELECT id, name, slug, category, created_at FROM entities ORDER BY created_at, id",
+    )
+    .all() as Array<Record<string, unknown>>;
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+
+  for (const row of rows) {
+    const key = `${String(row.category).toLowerCase()}:${normalizeAliasValue(String(row.name)).toLowerCase()}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
   }
 
-  return undefined;
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    const canonicalName = String(group[0].name);
+    const preferred =
+      group.find((row) => String(row.slug) === makeSlug(canonicalName)) ??
+      group[0];
+
+    for (const duplicate of group) {
+      if (String(duplicate.id) === String(preferred.id)) {
+        continue;
+      }
+
+      db.prepare(
+        "UPDATE entity_aliases SET entity_id = ? WHERE entity_id = ?",
+      ).run(String(preferred.id), String(duplicate.id));
+      db.prepare(
+        "UPDATE entity_links SET from_entity_id = ? WHERE from_entity_id = ?",
+      ).run(String(preferred.id), String(duplicate.id));
+      db.prepare(
+        "UPDATE entity_links SET to_entity_id = ? WHERE to_entity_id = ?",
+      ).run(String(preferred.id), String(duplicate.id));
+      db.prepare(
+        "UPDATE derived_dependencies SET target_id = ? WHERE target_type = 'entity' AND target_id = ?",
+      ).run(String(preferred.id), String(duplicate.id));
+      db.prepare("DELETE FROM entities WHERE id = ?").run(String(duplicate.id));
+    }
+
+    db.prepare(
+      `DELETE FROM entity_aliases
+        WHERE id NOT IN (
+          SELECT MIN(id)
+            FROM entity_aliases
+           GROUP BY entity_id, lower(alias)
+        )`,
+    ).run();
+    pruneRedundantAliases(String(preferred.id), canonicalName);
+  }
 }
 
 function persistEntityAliases(
@@ -691,7 +1102,11 @@ function upsertEntity(
   const slug = makeSlug(entity.name);
   const existing = findEntityByAliasOrSlug(entity, slug);
   const timestamp = nowIso();
-  const articleBody = entity.summary.trim();
+  const articleBody =
+    entity.category === "character" &&
+    hasUnsupportedPovOnlySummary(entity.summary)
+      ? stripUnsupportedPointOfViewLines(entity.summary)
+      : entity.summary.trim();
   const aliasesToPersist = buildImplicitAliases(entity);
   const inferredSubtype = inferEntitySubtype(entity);
 
@@ -717,6 +1132,11 @@ function upsertEntity(
       existingIsStub: wasStub,
       incomingIsStub: normalizedEvidence.isStub,
     });
+    const sanitizedCanonicalArticleBody =
+      entity.category === "character" &&
+      hasUnsupportedPovOnlySummary(canonicalArticleBody)
+        ? stripUnsupportedPointOfViewLines(canonicalArticleBody)
+        : canonicalArticleBody;
 
     db.prepare(
       `UPDATE entities
@@ -732,9 +1152,14 @@ function upsertEntity(
     ).run(
       canonicalName,
       entity.category,
-      (existing.subtype as string | null) ?? inferredSubtype,
+      inferredSubtype ??
+        (entity.category === "character" &&
+        existing.subtype === "Main" &&
+        shouldPreserveExistingMainSubtype(entity)
+          ? "Main"
+          : null),
       normalizedEvidence.isStub ? "1" : "0",
-      canonicalArticleBody,
+      sanitizedCanonicalArticleBody,
       normalizedEvidence.evidenceStatus,
       chapterId,
       timestamp,
@@ -750,6 +1175,7 @@ function upsertEntity(
           canonicalName.toLowerCase(),
       ),
     );
+    pruneRedundantAliases(String(existing.id), canonicalName);
 
     return {
       id: String(existing.id),
@@ -785,6 +1211,7 @@ function upsertEntity(
   );
 
   persistEntityAliases(id, chapterId, aliasesToPersist);
+  pruneRedundantAliases(id, entity.name);
 
   return { id, slug, created: true, promotedFromStub: false };
 }
@@ -894,7 +1321,6 @@ export function reconcileCanon(chapterId: string, result: ScanResult) {
   );
   replaceChronology(chapterId, result.chronology);
   replaceWatchlist(chapterId, result.watchlist);
-  regenerateGeneratedPages();
 
   replaceChapterDependencies(chapterId, [
     ...entityOutcomes.map((entity) => ({
@@ -913,6 +1339,9 @@ export function reconcileCanon(chapterId: string, result: ScanResult) {
       reason: "Continuity watchlist regenerated from scan.",
     },
   ]);
+  mergeExactNameDuplicateEntities();
+  removeOrphanedScanEntities();
+  regenerateGeneratedPages();
 
   return {
     entityOutcomes,

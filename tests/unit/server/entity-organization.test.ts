@@ -43,7 +43,7 @@ describe("entity organization", () => {
     expect(getEntityFolderSegments(minor, [minor])).toEqual(["Minor"]);
   });
 
-  it("groups horse items into vehicles", () => {
+  it("groups horse items into animals folders", () => {
     const horse = makeEntity({
       name: "Fleck",
       slug: "fleck",
@@ -51,10 +51,10 @@ describe("entity organization", () => {
       articleBody: "Marcus rode the horse Fleck back to town.",
     });
 
-    expect(getEntityFolderSegments(horse, [horse])).toEqual(["Vehicles"]);
+    expect(getEntityFolderSegments(horse, [horse])).toEqual(["Animals"]);
   });
 
-  it("creates nested location folders from parent place references", () => {
+  it("infers high-confidence location parents from strong location prose cues", () => {
     const vistana = makeEntity({
       name: "Vistana",
       slug: "vistana",
@@ -107,7 +107,7 @@ describe("entity organization", () => {
     ]);
   });
 
-  it("does not create a parent cycle between Kinburgh and City Watch Headquarters", () => {
+  it("leaves locations uncertain when no strong parent evidence exists", () => {
     const kinburgh = makeEntity({
       id: "kinburgh",
       name: "Kinburgh",
@@ -127,6 +127,18 @@ describe("entity organization", () => {
     expect(
       getEntityFolderSegments(headquarters, [kinburgh, headquarters]),
     ).toEqual(["Kinburgh"]);
+  });
+
+  it("groups event items into events folders", () => {
+    const item = makeEntity({
+      name: "Midwinter Ball",
+      slug: "midwinter-ball",
+      category: "item",
+      subtype: "Events",
+      articleBody: "A social event.",
+    });
+
+    expect(getEntityFolderSegments(item, [item])).toEqual(["Events"]);
   });
 
   it("prefers explicit folder paths over inferred folders", () => {

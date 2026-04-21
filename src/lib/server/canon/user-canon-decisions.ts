@@ -8,12 +8,28 @@ export interface UserCanonDecision {
   matchNames: string[];
   action: "suppress" | "override" | "merge";
   category?: EntityCategory;
+  itemSubtype?: ScanResult["entities"][number]["itemSubtype"];
   canonicalName?: string;
   mergeIntoName?: string;
   articleBody?: string;
   notes?: string;
   updatedAt: string;
 }
+
+const supportedItemSubtypeValues = [
+  "Weapons",
+  "Documents",
+  "Artifacts",
+  "Clothing",
+  "Events",
+  "Publications",
+  "Vehicles",
+  "Animals",
+  "Plants",
+  "Other",
+] as const satisfies NonNullable<UserCanonDecision["itemSubtype"]>[];
+
+const supportedItemSubtypes = new Set<string>(supportedItemSubtypeValues);
 
 function normalizeMatchName(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -87,12 +103,18 @@ function parseDecisionList(input: unknown) {
       category === "organization"
         ? category
         : undefined;
+    const itemSubtype = record.itemSubtype;
+    const normalizedItemSubtype =
+      typeof itemSubtype === "string" && supportedItemSubtypes.has(itemSubtype)
+        ? (itemSubtype as UserCanonDecision["itemSubtype"])
+        : undefined;
 
     return [
       {
         matchNames,
         action,
         category: normalizedCategory,
+        itemSubtype: normalizedItemSubtype,
         canonicalName:
           typeof record.canonicalName === "string"
             ? record.canonicalName.trim() || undefined
@@ -225,6 +247,10 @@ export function applyUserCanonDecisionToEntity(
     ...entity,
     name: canonicalName,
     category: decision.category ?? entity.category,
+    itemSubtype:
+      (decision.category ?? entity.category) === "item"
+        ? (decision.itemSubtype ?? entity.itemSubtype)
+        : null,
     summary: decision.articleBody?.trim() || entity.summary,
     aliases: canonicalAliases,
   };

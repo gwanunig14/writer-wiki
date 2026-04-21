@@ -8,6 +8,7 @@ type SupportedCategory = ScanResult["entities"][number]["category"];
 
 const locationSuffixes = [
   "Bay",
+  "Booth",
   "Field",
   "City",
   "Forest",
@@ -16,15 +17,123 @@ const locationSuffixes = [
   "Headquarters",
   "Mansion",
   "Gate",
+  "Lake",
   "Gates",
   "Road",
+  "Stall",
+  "Store",
   "Street",
   "Tower",
   "Tavern",
   "Inn",
+  "Manor",
 ];
 
+const eventSuffixes = ["Ball", "Ceremony", "Festival", "Feast", "Party", "War"];
+
 const mountContextNouns = ["horse", "destrier", "mare", "stallion", "gelding"];
+
+const animalSpeciesNouns = [
+  "animal",
+  "animals",
+  "beast",
+  "beasts",
+  "bird",
+  "birds",
+  "boar",
+  "boars",
+  "cat",
+  "cats",
+  "creature",
+  "creatures",
+  "destrier",
+  "destriers",
+  "dog",
+  "dogs",
+  "eagle",
+  "eagles",
+  "falcon",
+  "falcons",
+  "gelding",
+  "geldings",
+  "hawk",
+  "hawks",
+  "horse",
+  "horses",
+  "mare",
+  "mares",
+  "panther",
+  "panthers",
+  "serpent",
+  "serpents",
+  "spider",
+  "spiders",
+  "stallion",
+  "stallions",
+  "viper",
+  "vipers",
+  "wolf",
+  "wolves",
+];
+
+const plantSpeciesNouns = [
+  "bloom",
+  "blooms",
+  "blossom",
+  "blossoms",
+  "briar",
+  "briars",
+  "daisy",
+  "daisies",
+  "fern",
+  "ferns",
+  "flower",
+  "flowers",
+  "herb",
+  "herbs",
+  "ivy",
+  "lily",
+  "lilies",
+  "moss",
+  "orchid",
+  "orchids",
+  "petal",
+  "petals",
+  "reed",
+  "reeds",
+  "rose",
+  "roses",
+  "thorn",
+  "thorns",
+  "vine",
+  "vines",
+  "weed",
+  "weeds",
+];
+
+const fantasticalCreatureNouns = [
+  "basilisk",
+  "basilisks",
+  "dragon",
+  "dragons",
+  "drake",
+  "drakes",
+  "griffin",
+  "griffins",
+  "gryphon",
+  "gryphons",
+  "hydra",
+  "hydras",
+  "manticore",
+  "manticores",
+  "phoenix",
+  "phoenixes",
+  "phoenixes",
+  "unicorn",
+  "unicorns",
+  "wyvern",
+  "wyverns",
+];
 
 const organizationSuffixes = [
   "Empire",
@@ -57,18 +166,28 @@ const characterTitleSuffixes = [
   "Empress",
 ];
 
+const maxOpeningPovReferenceDistance = 650;
+
 const possessiveLocationNouns = [
   "bar",
   "barn",
   "camp",
+  "dock",
+  "docks",
   "desk",
   "farm",
+  "grounds",
   "hall",
+  "harbor",
+  "harbour",
   "home",
   "house",
   "inn",
   "office",
   "place",
+  "plain",
+  "plains",
+  "restaurant",
   "saloon",
   "shop",
   "stable",
@@ -104,21 +223,62 @@ const titlePrefixes = [
   "Baron",
   "Lady",
   "Lord",
+  "Miss",
   "Ms",
   "Mrs",
   "Mr",
+  "Doctor",
+  "Dr",
   "Sir",
 ];
 
 const bareTitleTokens = new Set([...titlePrefixes, "Miss", "Doctor", "Dr"]);
 
+const bareKinshipAliasTokens = new Set([
+  "Mama",
+  "Papa",
+  "Mother",
+  "Father",
+  "Mom",
+  "Dad",
+  "Brother",
+  "Sister",
+  "Grandma",
+  "Grandpa",
+  "Grandmother",
+  "Grandfather",
+]);
+
 const uncertainCharacterSuffixes = new Set([
   "something",
   "someone",
   "somebody",
+  "for",
 ]);
 
-const connectorTokens = new Set(["of", "the"]);
+const connectorTokens = new Set(["of", "the", "for"]);
+
+const organizationContextPattern =
+  /\b(empire|council|guild|order|watch|watchmen|militia|guard|guards|rangers|company|companies|court|army|legion)\b/i;
+
+const blockedSingleWordEntityTags = new Set([
+  "Pronoun",
+  "Adverb",
+  "Determiner",
+  "Conjunction",
+  "Preposition",
+]);
+
+const explicitProperNameTags = new Set([
+  "ProperNoun",
+  "Place",
+  "Person",
+  "Honorific",
+  "FirstName",
+  "LastName",
+  "MaleName",
+  "FemaleName",
+]);
 
 const singleWordStoplist = new Set([
   "All",
@@ -142,6 +302,7 @@ const singleWordStoplist = new Set([
   "From",
   "Give",
   "Good",
+  "Have",
   "He",
   "Her",
   "His",
@@ -176,6 +337,7 @@ const singleWordStoplist = new Set([
   "See",
   "She",
   "Should",
+  "Salt",
   "Source",
   "Splashes",
   "Sunday",
@@ -206,6 +368,8 @@ const singleWordStoplist = new Set([
   "You",
   "Days",
   "War",
+  "Mama",
+  "Papa",
   "Join",
 ]);
 
@@ -214,15 +378,18 @@ const multiWordLeadingStoplist = new Set([
   "And",
   "At",
   "Before",
+  "But",
   "Did",
   "Doesn",
   "Don",
   "Every",
   "Fat",
+  "Flanking",
   "For",
   "From",
   "Freed",
   "Give",
+  "Had",
   "Hello",
   "If",
   "In",
@@ -244,11 +411,17 @@ const multiWordLeadingStoplist = new Set([
   "Then",
   "Thin",
   "To",
+  "Whatever",
   "Tracking",
   "Through",
   "Turned",
   "Joining",
   "Join",
+  "Does",
+  "Even",
+  "Have",
+  "Let",
+  "Son",
 ]);
 
 const locationPrepositions = new Set([
@@ -651,12 +824,21 @@ function hasLocationSentenceRole(name: string, sentence: ParsedSentence) {
   const normalizedPrevious = previous
     ? getNormalizedSentenceTerm(previous)
     : "";
+  const previousPrevious =
+    match.start > 1 ? sentence.terms[match.start - 2] : undefined;
+  const normalizedPreviousPrevious = previousPrevious
+    ? getNormalizedSentenceTerm(previousPrevious)
+    : "";
   const normalizedNext = next ? getNormalizedSentenceTerm(next) : "";
   const possessiveHead = sentence.terms[match.start];
+  const previousPhrase = [normalizedPreviousPrevious, normalizedPrevious]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     (normalizedPrevious !== "" &&
       locationPrepositions.has(normalizedPrevious)) ||
+    previousPhrase === "out of" ||
     ((possessiveHead.text.endsWith("'s") ||
       possessiveHead.text.endsWith("’s")) &&
       normalizedNext !== "" &&
@@ -885,12 +1067,104 @@ function addPointOfViewCueToCharacterSummary(summary: string) {
     .join("\n");
 }
 
+function removeUnsupportedPointOfViewCue(summary: string) {
+  const sections = splitSummarySections(summary);
+  const unsupportedCuePattern =
+    /\b(?:protagonist|main character|lead character|primary character|primary pov|on-page primary character|point-of-view|point of view|pov)\b/i;
+
+  for (const section of sections) {
+    section.lines = section.lines.filter(
+      (line) => !unsupportedCuePattern.test(line),
+    );
+  }
+
+  return sections
+    .flatMap((section) =>
+      section.heading ? [section.heading, ...section.lines] : section.lines,
+    )
+    .join("\n");
+}
+
 function normalizeAliasCandidate(value: string) {
   return value
+    .replace(
+      /\b(Ms|Mrs|Miss|Mr|Dr|Doctor|Sir|Lady|Lord|Baron|Baroness)\./g,
+      "$1",
+    )
     .replace(/^["“”'`]+|["“”'`]+$/g, "")
     .replace(/[.,!?;:]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Strips trailing parenthetical annotations such as "(alias used)" or "(assumed name)"
+function stripAliasAnnotation(alias: string): string {
+  return alias.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+// Keywords that indicate an alias entry marks an assumed/false name rather than a true name
+const aliasAnnotationKeywords =
+  /\b(?:alias|assumed|false|fake|pseudonym|cover|pen name|used)\b/i;
+
+// Summary keywords that signal the entity itself is an assumed/false identity
+const assumedIdentitySummaryKeywords =
+  /\b(?:alias|assumed name|false identity|false name|pseudonym|cover identity|fake name|in-scene alias|alias used)\b/i;
+
+function candidateSummaryIsAssumedIdentity(summary: string): boolean {
+  return assumedIdentitySummaryKeywords.test(summary);
+}
+
+function isHonorificOnlyAlias(alias: string) {
+  const tokens = normalizeAliasCandidate(alias).split(/\s+/).filter(Boolean);
+  return (
+    (tokens.length > 0 && bareTitleTokens.has(tokens[0])) ||
+    (tokens.length === 1 && bareKinshipAliasTokens.has(tokens[0]))
+  );
+}
+
+function normalizeEntityAliases(
+  aliases: string[],
+  canonicalName: string,
+  category: SupportedCategory,
+) {
+  const canonical = normalizeAliasCandidate(canonicalName).toLowerCase();
+  const normalized = new Set<string>();
+
+  for (const alias of aliases) {
+    const cleaned = normalizeAliasCandidate(alias);
+    if (!cleaned) {
+      continue;
+    }
+
+    if (category === "character" && isHonorificOnlyAlias(cleaned)) {
+      continue;
+    }
+
+    if (cleaned.toLowerCase() === canonical) {
+      continue;
+    }
+
+    // Drop aliases that are sentence fragments (>6 words likely from prose, not a name)
+    if (cleaned.split(/\s+/).length > 6) {
+      continue;
+    }
+
+    // Drop an alias that is the possessive owner extracted from a Publications entity name
+    // e.g. "Branzo Vistani" should not be an alias for "Branzo Vistani's journals"
+    if (category === "item") {
+      const possessiveMatch = canonicalName.match(/^(.+?)['']s\s+\S/);
+      if (
+        possessiveMatch &&
+        cleaned.toLowerCase() === possessiveMatch[1].toLowerCase()
+      ) {
+        continue;
+      }
+    }
+
+    normalized.add(cleaned);
+  }
+
+  return [...normalized];
 }
 
 function isDistinctCharacterAlias(alias: string, canonicalName: string) {
@@ -900,6 +1174,10 @@ function isDistinctCharacterAlias(alias: string, canonicalName: string) {
   }
 
   const aliasTokens = normalizedAlias.split(/\s+/).filter(Boolean);
+  if (aliasTokens.length > 0 && bareTitleTokens.has(aliasTokens[0])) {
+    return false;
+  }
+
   if (
     aliasTokens.length < 2 ||
     aliasTokens.length > 4 ||
@@ -1034,11 +1312,39 @@ function extractDialogueExchangeAliases(
   return aliasesByCharacter;
 }
 
+function extractAppositiveCharacterAliases(
+  chapterText: string,
+  entities: ScanResult["entities"],
+) {
+  const aliasesByCharacter = new Map<string, Set<string>>();
+  const appositivePattern =
+    /\b((?:(?:Ms|Mrs|Miss|Mr|Dr|Doctor|Sir|Lady|Lord)\.?\s+)?[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,2})\.\s*(The\s+[A-Z][A-Za-z'-]+)\b/g;
+
+  for (const match of chapterText.matchAll(appositivePattern)) {
+    const character = resolveUniqueCharacterReference(match[1] ?? "", entities);
+    const alias = normalizeAliasCandidate(match[2] ?? "");
+    if (!character || !isDistinctCharacterAlias(alias, character.name)) {
+      continue;
+    }
+
+    if (!aliasesByCharacter.has(character.name)) {
+      aliasesByCharacter.set(character.name, new Set<string>());
+    }
+    aliasesByCharacter.get(character.name)?.add(alias);
+  }
+
+  return aliasesByCharacter;
+}
+
 function enrichCharacterAliasesFromContext(
   entities: ScanResult["entities"],
   chapterText: string,
 ) {
   const dialogueAliases = extractDialogueExchangeAliases(chapterText, entities);
+  const appositiveAliases = extractAppositiveCharacterAliases(
+    chapterText,
+    entities,
+  );
 
   return entities.map((entity) => {
     if (entity.category !== "character") {
@@ -1062,6 +1368,10 @@ function enrichCharacterAliasesFromContext(
       aliases.add(alias);
     }
 
+    for (const alias of appositiveAliases.get(entity.name) ?? []) {
+      aliases.add(alias);
+    }
+
     aliases.delete(normalizeAliasCandidate(entity.name));
 
     return {
@@ -1069,6 +1379,144 @@ function enrichCharacterAliasesFromContext(
       aliases: [...aliases],
     };
   });
+}
+
+function extractAppositiveLocationAliases(
+  chapterText: string,
+  entities: ScanResult["entities"],
+) {
+  const aliasesByLocation = new Map<string, Set<string>>();
+  const patterns = [
+    /\b([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,3})\s+itself,\s+the\s+([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,3})\b/g,
+    /\b([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,3}),\s+the\s+([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,3})\b/g,
+  ];
+  const locations = entities.filter((entity) => entity.category === "location");
+
+  for (const pattern of patterns) {
+    for (const match of chapterText.matchAll(pattern)) {
+      const primaryName = sanitizeMatchedName(match[1] ?? "");
+      const secondaryName = sanitizeMatchedName(match[2] ?? "");
+      const primary = locations.find(
+        (entity) =>
+          normalizeAliasCandidate(entity.name).toLowerCase() ===
+          primaryName.toLowerCase(),
+      );
+      const secondary = locations.find(
+        (entity) =>
+          normalizeAliasCandidate(
+            stripLeadingArticle(entity.name),
+          ).toLowerCase() === secondaryName.toLowerCase(),
+      );
+
+      if (!primary || !secondary || primary.name === secondary.name) {
+        continue;
+      }
+
+      if (!aliasesByLocation.has(primary.name)) {
+        aliasesByLocation.set(primary.name, new Set<string>());
+      }
+
+      aliasesByLocation.get(primary.name)?.add(secondary.name);
+    }
+  }
+
+  return aliasesByLocation;
+}
+
+function mergeAppositiveLocationEntities(
+  entities: ScanResult["entities"],
+  chapterText: string,
+) {
+  const aliasesByLocation = extractAppositiveLocationAliases(
+    chapterText,
+    entities,
+  );
+  if (aliasesByLocation.size === 0) {
+    return entities;
+  }
+
+  const droppedLocationNames = new Set(
+    Array.from(aliasesByLocation.values()).flatMap((aliases) =>
+      Array.from(aliases),
+    ),
+  );
+
+  return entities.flatMap((entity) => {
+    if (entity.category !== "location") {
+      return [entity];
+    }
+
+    if (droppedLocationNames.has(entity.name)) {
+      return [];
+    }
+
+    const extraAliases = Array.from(aliasesByLocation.get(entity.name) ?? []);
+    if (extraAliases.length === 0) {
+      return [entity];
+    }
+
+    return [
+      {
+        ...entity,
+        aliases: normalizeEntityAliases(
+          [...entity.aliases, ...extraAliases],
+          entity.name,
+          entity.category,
+        ),
+      },
+    ];
+  });
+}
+
+function findAppositiveLocationCanonicalName(name: string, context: string) {
+  const strippedName = stripLeadingArticle(sanitizeMatchedName(name));
+  if (!strippedName || !context) {
+    return null;
+  }
+
+  const patterns = [
+    new RegExp(
+      `\\b([A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3})\\s+itself,\\s+the\\s+${escapeRegExp(strippedName)}\\b`,
+      "i",
+    ),
+    new RegExp(
+      `\\b([A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3}),\\s+the\\s+${escapeRegExp(strippedName)}\\b`,
+      "i",
+    ),
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(context);
+    if (match?.[1]) {
+      return sanitizeMatchedName(match[1]);
+    }
+  }
+
+  return null;
+}
+
+function findDescriptiveLocationRootName(name: string, chapterText: string) {
+  const tokens = sanitizeMatchedName(name).split(/\s+/).filter(Boolean);
+  if (tokens.length !== 2) {
+    return null;
+  }
+
+  const [rootName, suffix] = tokens;
+  if (!/^(?:Manor|House|Hall|Keep|Castle|Tower)$/i.test(suffix)) {
+    return null;
+  }
+
+  if (
+    new RegExp(
+      `\\b${escapeRegExp(rootName)}\\s+itself,\\s+the\\s+[A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3}\\b`,
+      "i",
+    ).test(chapterText) ||
+    hasChapterWideSingleWordEvidence(rootName, "location", chapterText)
+  ) {
+    return rootName;
+  }
+
+  return null;
 }
 
 function getCharacterSurname(name: string) {
@@ -1095,10 +1543,228 @@ function stripLeadingArticle(name: string) {
 }
 
 function sanitizeMatchedName(name: string) {
-  return name
-    .replace(/(?:\s+(?:of|the|and))+$/i, "")
+  const cleaned = name
+    .replace(/\b(Ms|Mrs|Miss|Mr|Dr|Doctor|Sir|Lady|Lord)\./g, "$1")
+    .replace(/^(?:But|Had|Whatever)\s+/i, "")
+    .replace(/[.,!?;:]+$/g, "")
+    .replace(/['’]s$/i, "")
+    .replace(/(?:\s+(?:of|the|and|for))+$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  if (isNamedEventName(cleaned)) {
+    return cleaned.replace(
+      /^(?:The\s+)?(?:[A-Z][A-Za-z-]+\s+[A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){0,1})['’]s\s+(?=[A-Z])/,
+      "",
+    );
+  }
+
+  return cleaned;
+}
+
+function isLikelyPersonName(name: string) {
+  const tokens = name.split(/\s+/).filter(Boolean);
+  const trailingToken = tokens.at(-1) ?? "";
+
+  return (
+    tokens.length > 1 &&
+    !name.startsWith("The ") &&
+    !/^(?:Daily|Weekly|Monthly|Quarterly|Gazette|Times|Chronicle|Journal)$/i.test(
+      trailingToken,
+    ) &&
+    !tokens.some((token) => connectorTokens.has(token.toLowerCase())) &&
+    !locationSuffixes.some(
+      (suffix) => name.endsWith(` ${suffix}`) || name === suffix,
+    ) &&
+    !organizationSuffixes.some(
+      (suffix) => name.endsWith(` ${suffix}`) || name === suffix,
+    )
+  );
+}
+
+function isNamedEventName(name: string) {
+  return eventSuffixes.some(
+    (suffix) => name.endsWith(` ${suffix}`) || name === suffix,
+  );
+}
+
+function isBusinessLocationName(name: string) {
+  return /\b(?:Booth|Stall|Store|Tavern|Inn|Hearth)\b$/i.test(name);
+}
+
+function isCollectivePeopleGroupName(name: string) {
+  const stripped = stripLeadingArticle(name);
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+
+  return name.startsWith("The ") && tokens.length === 1;
+}
+
+function singularizeFamilyCollectiveToken(token: string) {
+  if (/ies$/i.test(token)) {
+    return token.slice(0, -3) + "y";
+  }
+
+  if (/(?:ches|shes|sses|xes|zes)$/i.test(token)) {
+    return token.slice(0, -2);
+  }
+
+  if (/s$/i.test(token) && !/ss$/i.test(token)) {
+    return token.slice(0, -1);
+  }
+
+  return token;
+}
+
+function isFamilyCollectiveReference(name: string, context: string) {
+  if (!name.startsWith("The ")) {
+    return false;
+  }
+
+  const stripped = stripLeadingArticle(name);
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+  if (tokens.length !== 1 || organizationContextPattern.test(context)) {
+    return false;
+  }
+
+  const singularToken = singularizeFamilyCollectiveToken(tokens[0]);
+  if (
+    !singularToken ||
+    singularToken.toLowerCase() === tokens[0].toLowerCase()
+  ) {
+    return false;
+  }
+
+  const existingMatch = getDatabase()
+    .prepare(
+      `SELECT 1
+         FROM entities
+        WHERE category = 'character'
+          AND (
+            lower(name) = lower(?) OR
+            lower(name) LIKE lower(?)
+          )
+        LIMIT 1`,
+    )
+    .get(singularToken, `% ${singularToken}`);
+
+  return Boolean(existingMatch);
+}
+
+function isDemonymModifierFragment(name: string, context: string) {
+  const stripped = stripLeadingArticle(name);
+
+  return (
+    /^([A-Z][a-z]+(?:an|ian|ean|ish|ese))$/i.test(stripped) &&
+    new RegExp(
+      `\\b${escapeRegExp(stripped)}\\b\\s+(?:court|army|navy|nobility|people|citizens?|soldiers?|barons?)\\b`,
+      "i",
+    ).test(context)
+  );
+}
+
+function expandPossessiveBusinessNameFromChapterContext(
+  name: string,
+  chapterText: string,
+) {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed || !chapterText) {
+    return trimmed;
+  }
+
+  const occurrenceIndex = chapterText
+    .toLowerCase()
+    .indexOf(trimmed.toLowerCase());
+  if (occurrenceIndex === -1) {
+    return trimmed;
+  }
+
+  const forwardWindow = chapterText.slice(
+    occurrenceIndex,
+    occurrenceIndex + 120,
+  );
+  const possessiveBusinessMatch = new RegExp(
+    `^(${escapeRegExp(trimmed)}['’]s)\b[^.\n]{0,40}\b(?:restaurant|bakery|pastry\s+shop|shop|store|tavern|inn|cafe|saloon|stall|booth)\b`,
+    "i",
+  ).exec(forwardWindow);
+
+  return possessiveBusinessMatch?.[1]?.replace(/\s+/g, " ").trim() ?? trimmed;
+}
+
+function expandEntityNameFromChapterContext(
+  name: string,
+  category: SupportedCategory,
+  chapterText: string,
+) {
+  const trimmed = sanitizeMatchedName(name.trim());
+
+  if (!chapterText || !trimmed || category === "character") {
+    return trimmed;
+  }
+
+  const occurrenceIndex = chapterText
+    .toLowerCase()
+    .indexOf(trimmed.toLowerCase());
+
+  if (occurrenceIndex !== -1) {
+    const forwardWindow = chapterText.slice(
+      occurrenceIndex,
+      occurrenceIndex + 120,
+    );
+    const possessiveBusinessMatch = new RegExp(
+      `^(${escapeRegExp(trimmed)}['’]s)\\b[^.\n]{0,40}\\b(?:restaurant|bakery|pastry\\s+shop|shop|store|tavern|inn|cafe|saloon|stall|booth)\\b`,
+      "i",
+    ).exec(forwardWindow);
+    if (possessiveBusinessMatch?.[1]) {
+      return possessiveBusinessMatch[1].replace(/\s+/g, " ").trim();
+    }
+
+    const backwardWindow = chapterText.slice(
+      Math.max(0, occurrenceIndex - 80),
+      occurrenceIndex + trimmed.length,
+    );
+    const leadingPhraseMatch = new RegExp(
+      `([A-Z][A-Za-z]+(?:['’][A-Za-z]+)?(?:\\s+(?:[A-Z][A-Za-z]+(?:['’][A-Za-z]+)?|of|the|and|for)){0,6}\\s+${escapeRegExp(trimmed)})$`,
+      "i",
+    ).exec(backwardWindow);
+    if (leadingPhraseMatch?.[1]) {
+      return sanitizeMatchedName(leadingPhraseMatch[1]);
+    }
+
+    if (!trimmed.includes(" for ")) {
+      const titledWorkMatch = new RegExp(
+        `^${escapeRegExp(trimmed)}\\s+for\\s+[A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3}\\b`,
+        "i",
+      ).exec(forwardWindow);
+      if (titledWorkMatch?.[0]) {
+        return sanitizeMatchedName(titledWorkMatch[0]);
+      }
+    }
+  }
+
+  return trimmed;
+}
+
+function expandWorkLikeNameFromChapterContext(
+  name: string,
+  chapterText: string,
+) {
+  const sanitizedName = sanitizeMatchedName(name.trim());
+  const expandedName = expandEntityNameFromChapterContext(
+    sanitizedName,
+    "item",
+    chapterText,
+  );
+
+  if (
+    expandedName !== sanitizedName &&
+    (expandedName.includes(" of ") ||
+      expandedName.includes(" for ") ||
+      isNamedEventName(expandedName))
+  ) {
+    return expandedName;
+  }
+
+  return sanitizedName;
 }
 
 function appearsInChapterText(name: string, chapterText: string) {
@@ -1113,6 +1779,50 @@ function appearsInChapterText(name: string, chapterText: string) {
   });
 }
 
+function hasExistingEntityGrounding(
+  entity: ScanResult["entities"][number],
+  chapterText: string,
+) {
+  if (!chapterText) {
+    return false;
+  }
+
+  if (appearsInChapterText(entity.name, chapterText)) {
+    return true;
+  }
+
+  if (
+    entity.aliases.some((alias) => appearsInChapterText(alias, chapterText))
+  ) {
+    return true;
+  }
+
+  if (entity.category !== "character") {
+    return false;
+  }
+
+  const tokens = stripTitlePrefix(entity.name)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(
+      (token) =>
+        token.length > 0 &&
+        !connectorTokens.has(token.toLowerCase()) &&
+        !singleWordStoplist.has(token) &&
+        !bareTitleTokens.has(token),
+    );
+
+  if (tokens.length < 2) {
+    return false;
+  }
+
+  return tokens.some(
+    (token) =>
+      hasStandaloneSingleWordOccurrence(token, chapterText) &&
+      hasChapterWideSingleWordEvidence(token, "character", chapterText),
+  );
+}
+
 function hasPlausibleTokenShape(name: string) {
   const tokens = name.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) {
@@ -1121,7 +1831,8 @@ function hasPlausibleTokenShape(name: string) {
 
   if (tokens.length === 1) {
     return (
-      isCapitalizedToken(tokens[0]) &&
+      (isCapitalizedToken(tokens[0]) ||
+        /^[A-Z][A-Za-z'-]*['’]s$/.test(tokens[0])) &&
       !singleWordStoplist.has(tokens[0]) &&
       !bareTitleTokens.has(tokens[0])
     );
@@ -1209,6 +1920,60 @@ function hasChapterWideSingleWordEvidence(
   return false;
 }
 
+function onlyAppearsAsConnectedTitleTail(name: string, chapterText: string) {
+  if (!chapterText) {
+    return false;
+  }
+
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`, "g");
+  let sawMatch = false;
+
+  for (const match of chapterText.matchAll(pattern)) {
+    const index = match.index ?? -1;
+    if (index < 0) {
+      continue;
+    }
+
+    sawMatch = true;
+    const before = chapterText.slice(Math.max(0, index - 12), index);
+    if (!/\b(?:of|for)\s+$/i.test(before)) {
+      return false;
+    }
+  }
+
+  return sawMatch;
+}
+
+function onlyAppearsAsLeadingConnectedTitleToken(
+  name: string,
+  chapterText: string,
+) {
+  if (!chapterText) {
+    return false;
+  }
+
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`, "g");
+  let sawMatch = false;
+
+  for (const match of chapterText.matchAll(pattern)) {
+    const index = match.index ?? -1;
+    if (index < 0) {
+      continue;
+    }
+
+    sawMatch = true;
+    const after = chapterText.slice(
+      index + name.length,
+      index + name.length + 12,
+    );
+    if (!/^\s+(?:of|for)\b/i.test(after)) {
+      return false;
+    }
+  }
+
+  return sawMatch;
+}
+
 function hasMultiWordCharacterOverlap(
   name: string,
   entities: ScanResult["entities"],
@@ -1249,13 +2014,56 @@ function shouldDropSingleWordCharacterAliasCollision(
   );
 }
 
+function shouldDropSingleWordCharacterItemTitleCollision(
+  entity: ScanResult["entities"][number],
+  entities: ScanResult["entities"],
+  chapterText: string,
+) {
+  return (
+    entity.category === "character" &&
+    entity.name.split(/\s+/).length === 1 &&
+    (!hasChapterWideSingleWordEvidence(entity.name, "character", chapterText) ||
+      onlyAppearsAsLeadingConnectedTitleToken(entity.name, chapterText)) &&
+    entities.some(
+      (candidate) =>
+        candidate.category === "item" &&
+        candidate.name.split(/\s+/).length > 1 &&
+        candidate.name
+          .toLowerCase()
+          .split(/\s+/)
+          .includes(entity.name.toLowerCase()),
+    )
+  );
+}
+
+function shouldDropMultiWordCharacterTitleTailCollision(
+  entity: ScanResult["entities"][number],
+  entities: ScanResult["entities"],
+  chapterText: string,
+) {
+  return (
+    entity.category === "character" &&
+    entity.name.split(/\s+/).length > 1 &&
+    onlyAppearsAsConnectedTitleTail(entity.name, chapterText) &&
+    entities.some(
+      (candidate) =>
+        candidate.category === "item" &&
+        candidate.name.endsWith(` ${entity.name}`),
+    )
+  );
+}
+
 function shouldDropCoreNameDuplicate(
   entity: ScanResult["entities"][number],
   entities: ScanResult["entities"],
 ) {
   const normalizeCore = (value: string) =>
     value
-      .replace(/^(?:the|mr|mrs|ms|miss|captain|sir|lady|lord)\s+/i, "")
+      .replace(
+        /^(?:the|mr|mrs|ms|miss|captain|sir|lady|lord|baron|baroness|emperor|empress|prince|princess|professor|master|aunt|uncle)\s+/i,
+        "",
+      )
+      .replace(/['’]s$/i, "")
       .trim()
       .toLowerCase();
 
@@ -1274,6 +2082,19 @@ function shouldDropCoreNameDuplicate(
       candidate.name.toLowerCase() !== entity.name.toLowerCase()
     );
   });
+}
+
+function shouldDropRoleDescriptorCharacter(
+  entity: ScanResult["entities"][number],
+) {
+  return (
+    (entity.category === "character" &&
+      /^(?:Lady|Lord|Baron|Baroness|Prince|Princess|Duke|Duchess|Count|Countess|Emperor|Empress)\s+of\s+/i.test(
+        entity.name,
+      )) ||
+    (entity.category === "character" &&
+      /^(?:Son|Daughter|Wife|Husband)\s+of\s+/i.test(entity.name))
+  );
 }
 
 function shouldDropHonorificSurnameDuplicate(
@@ -1312,11 +2133,195 @@ function shouldDropHonorificSurnameDuplicate(
   });
 }
 
+function shouldDropCharacterAliasDuplicate(
+  entity: ScanResult["entities"][number],
+  entities: ScanResult["entities"],
+) {
+  if (entity.category !== "character") {
+    return false;
+  }
+
+  const normalizedName = normalizeAliasCandidate(entity.name).toLowerCase();
+  if (!normalizedName) {
+    return false;
+  }
+
+  // Pre-compute this entity's own aliases stripped of annotations for mutual-reference checks
+  const entityAliasesStripped = entity.aliases.map((a) =>
+    normalizeAliasCandidate(stripAliasAnnotation(a)).toLowerCase(),
+  );
+
+  return entities.some((candidate) => {
+    if (candidate === entity || candidate.category !== "character") {
+      return false;
+    }
+
+    return candidate.aliases.some((alias) => {
+      const rawNorm = normalizeAliasCandidate(alias).toLowerCase();
+      const strippedNorm = normalizeAliasCandidate(
+        stripAliasAnnotation(alias),
+      ).toLowerCase();
+
+      if (rawNorm !== normalizedName && strippedNorm !== normalizedName) {
+        return false;
+      }
+
+      // If the alias has an annotation marking this as an assumed/false name,
+      // entity is the assumed identity — drop it
+      if (aliasAnnotationKeywords.test(alias)) {
+        return true;
+      }
+
+      // Without annotation: only drop if entity doesn't also list the candidate
+      // as one of its own aliases (mutual reference means entity is canonical)
+      const candidateNormName = normalizeAliasCandidate(
+        candidate.name,
+      ).toLowerCase();
+      if (entityAliasesStripped.includes(candidateNormName)) {
+        return false;
+      }
+
+      // If the candidate's own summary identifies it as an assumed/false identity,
+      // the candidate is the impostor — do not drop this entity
+      if (candidateSummaryIsAssumedIdentity(candidate.summary)) {
+        return false;
+      }
+
+      return true;
+    });
+  });
+}
+
+function shouldDropAliasDuplicate(
+  entity: ScanResult["entities"][number],
+  entities: ScanResult["entities"],
+) {
+  const normalizedName = normalizeAliasCandidate(entity.name).toLowerCase();
+  if (!normalizedName) {
+    return false;
+  }
+
+  // Pre-compute this entity's own aliases stripped of annotations
+  const entityAliasesStripped = entity.aliases.map((a) =>
+    normalizeAliasCandidate(stripAliasAnnotation(a)).toLowerCase(),
+  );
+
+  return entities.some((candidate) => {
+    if (candidate === entity || candidate.category !== "character") {
+      return false;
+    }
+
+    return candidate.aliases.some((alias) => {
+      const rawNorm = normalizeAliasCandidate(alias).toLowerCase();
+      const strippedNorm = normalizeAliasCandidate(
+        stripAliasAnnotation(alias),
+      ).toLowerCase();
+
+      if (rawNorm !== normalizedName && strippedNorm !== normalizedName) {
+        return false;
+      }
+
+      // If the alias is annotated as an assumed/false name → drop entity
+      if (aliasAnnotationKeywords.test(alias)) {
+        return true;
+      }
+
+      // Without annotation: only drop if entity doesn't also list the candidate
+      // as one of its own aliases (mutual reference means entity is canonical)
+      const candidateNormName = normalizeAliasCandidate(
+        candidate.name,
+      ).toLowerCase();
+      if (entityAliasesStripped.includes(candidateNormName)) {
+        return false;
+      }
+
+      // If the candidate's own summary identifies it as an assumed/false identity,
+      // the candidate is the impostor — do not drop this entity
+      if (candidateSummaryIsAssumedIdentity(candidate.summary)) {
+        return false;
+      }
+
+      return true;
+    });
+  });
+}
+
+function shouldDropItemTitleFragmentDuplicate(
+  entity: ScanResult["entities"][number],
+  entities: ScanResult["entities"],
+) {
+  if (entity.category === "character") {
+    return false;
+  }
+
+  const entityTokens = entity.name.toLowerCase().split(/\s+/).filter(Boolean);
+  if (entityTokens.length === 0) {
+    return false;
+  }
+
+  return entities.some((candidate) => {
+    if (
+      candidate === entity ||
+      candidate.category !== "item" ||
+      candidate.name.length <= entity.name.length
+    ) {
+      return false;
+    }
+
+    const candidateTokens = candidate.name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    return entityTokens.every((token) => candidateTokens.includes(token));
+  });
+}
+
+function mergeCanonicalDuplicateEntities(entities: ScanResult["entities"]) {
+  const merged = new Map<string, ScanResult["entities"][number]>();
+
+  for (const entity of entities) {
+    const key = `${entity.category}:${entity.name.trim().toLowerCase()}`;
+    const existing = merged.get(key);
+
+    if (!existing) {
+      merged.set(key, entity);
+      continue;
+    }
+
+    const aliasSet = new Set([...existing.aliases, ...entity.aliases]);
+    aliasSet.delete(existing.name);
+    aliasSet.delete(entity.name);
+
+    const linkSet = new Set(
+      [...existing.links, ...entity.links].map((link) => JSON.stringify(link)),
+    );
+
+    merged.set(key, {
+      ...existing,
+      itemSubtype: existing.itemSubtype ?? entity.itemSubtype,
+      summary:
+        entity.summary.length > existing.summary.length
+          ? entity.summary
+          : existing.summary,
+      isStub: existing.isStub && entity.isStub,
+      aliases: [...aliasSet],
+      links: [...linkSet].map((value) => JSON.parse(value)),
+    });
+  }
+
+  return [...merged.values()];
+}
+
 function hasStrongSingleWordEvidence(
   name: string,
   category: SupportedCategory,
   context: string,
 ) {
+  if (category !== "item" && hasBlockedSingleWordTokenRole(name, context)) {
+    return false;
+  }
+
   if (category === "item") {
     const mountPattern = mountContextNouns.join("|");
 
@@ -1333,18 +2338,221 @@ function hasStrongSingleWordEvidence(
   }
 
   if (category === "location") {
+    const strippedName = stripLeadingArticle(sanitizeMatchedName(name));
+    if (
+      strippedName &&
+      new RegExp(
+        `\\b${escapeRegExp(strippedName)}\\s+itself,\\s+the\\s+[A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3}\\b`,
+        "i",
+      ).test(context)
+    ) {
+      return true;
+    }
+
     return parseSentencesWithGrammar(context).some((sentence) =>
       hasLocationSentenceRole(name, sentence),
     );
   }
 
   if (category === "character") {
+    if (isNamedAnimalReference(name, context)) {
+      return true;
+    }
+
     return parseSentencesWithGrammar(context).some((sentence) =>
       hasHumanSentenceRole(name, sentence),
     );
   }
 
   return false;
+}
+
+function isAnimalKindName(name: string) {
+  const tokens = name
+    .trim()
+    .split(/\s+/)
+    .map((token) => normalizeSentenceValue(token))
+    .filter(Boolean);
+
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  const lastToken = tokens[tokens.length - 1];
+  return (
+    fantasticalCreatureNouns.includes(lastToken) ||
+    (tokens.length > 1 && animalSpeciesNouns.includes(lastToken))
+  );
+}
+
+function isPlantKindName(name: string) {
+  const tokens = name
+    .trim()
+    .split(/\s+/)
+    .map((token) => normalizeSentenceValue(token))
+    .filter(Boolean);
+
+  if (tokens.length < 2) {
+    return false;
+  }
+
+  const lastToken = tokens[tokens.length - 1];
+  return plantSpeciesNouns.includes(lastToken);
+}
+
+function isNamedAnimalReference(name: string, context: string) {
+  const escapedName = escapeRegExp(name);
+  const mountPattern = mountContextNouns.join("|");
+  const animalPattern = animalSpeciesNouns.join("|");
+
+  return (
+    new RegExp(
+      `\\b(?:his|her|their|a|an|the|bay|black|brown|white|gray|grey|golden|cremello)\\s+(?:${mountPattern}|${animalPattern})\\s*,?\\s*${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b${escapedName}\\b[^.\\n]{0,24}\\b(?:${mountPattern}|${animalPattern})\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:rode|rides|riding|mounted|mounts|mounting|hopped\\s+onto|climbed\\s+onto|got\\s+onto|swung\\s+onto|astride|unhitched)\\b[^.\\n]{0,24}\\b${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b${escapedName}\\b[^.\\n]{0,24}\\b(?:trotting|galloping|cantering|whinnying|snorting|neighing)\\b`,
+      "i",
+    ).test(context)
+  );
+}
+
+function inferItemSubtype(name: string, context: string) {
+  if (isNamedEventName(name)) {
+    return "Events" as const;
+  }
+
+  if (hasPublicationOrWorkContext(name, context)) {
+    return "Publications" as const;
+  }
+
+  if (hasVehicleContext(name, context)) {
+    return "Vehicles" as const;
+  }
+
+  if (isAnimalKindName(name)) {
+    return "Animals" as const;
+  }
+
+  if (isPlantKindName(name)) {
+    return "Plants" as const;
+  }
+
+  return null;
+}
+
+function hasBlockedSingleWordTokenRole(name: string, context: string) {
+  if (!context || name.trim().split(/\s+/).length !== 1) {
+    return false;
+  }
+
+  return parseSentencesWithGrammar(context).some((sentence) => {
+    const match = findReferenceMatch(sentence, name);
+    if (!match) {
+      return false;
+    }
+
+    const hasExplicitProperNameTag = match.terms.some((term) =>
+      Array.from(explicitProperNameTags).some((tag) => term.tags.has(tag)),
+    );
+    const hasBlockedTag = match.terms.some((term) =>
+      Array.from(blockedSingleWordEntityTags).some((tag) => term.tags.has(tag)),
+    );
+
+    return hasBlockedTag && !hasExplicitProperNameTag;
+  });
+}
+
+function hasPublicationOrWorkContext(name: string, context: string) {
+  const escapedName = escapeRegExp(name);
+  const publicationNouns =
+    "serials?|stories?|books?|novels?|articles?|columns?|publications?|periodicals?|newspapers?|papers?|magazines?|journals?";
+  const periodicalTail = name.split(/\s+/).at(-1) ?? "";
+  const looksLikePeriodicalTitle =
+    /^(?:Daily|Weekly|Monthly|Quarterly|Gazette|Times|Chronicle|Journal)$/i.test(
+      periodicalTail,
+    );
+
+  return (
+    new RegExp(
+      `\\b(?:${publicationNouns})\\b[^.\\n]{0,40}\\bin\\s+${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:${publicationNouns})\\b[^.\\n]{0,40}\\b(?:called|titled|named)\\s+${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:${publicationNouns}|issues?)\\b[^.\\n]{0,20}${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:in|from|inside|within)\\s+${escapedName}\\b[^.\\n]{0,40}\\b(?:${publicationNouns}|issues?)\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b${escapedName}\\b[^.\\n]{0,40}\\b(?:publications?|periodicals?|newspapers?|papers?|magazines?|journals?)\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:books?|novels?|stories?|serials?|periodicals?|publications?)\\b[^.\\n]{0,40}\\b(?:in|of|from|called|titled|named)?\\s*${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:printing|issue|edition|release|released)\\b[^.\\n]{0,20}\\b(?:of\\s+)?${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:reading|symbolism|metaphor)\\b[^.\\n]{0,12}\\b(?:in|of|from)\\s+${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b(?:reading|symbolism|metaphor)\\b[^.\\n]{0,60}\\bin\\s+${escapedName}\\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\\b${escapedName}\\b[^.\\n]{0,40}\\b(?:books?|novels?|stories?|serials?|periodicals?|publications?)\\b`,
+      "i",
+    ).test(context) ||
+    (looksLikePeriodicalTitle &&
+      new RegExp(
+        `\\b(?:opened|bought|purchased|read|reading)\\b[^.\\n]{0,20}\\b(?:the\\s+)?(?:new\\s+)?${escapedName}\\b`,
+        "i",
+      ).test(context))
+  );
+}
+
+function hasVehicleContext(name: string, context: string) {
+  if (!name || !context) {
+    return false;
+  }
+
+  const escapedName = escapeRegExp(name);
+  const vehicleNouns =
+    "ships?|boats?|vessels?|carriages?|wagons?|coaches?|carts?|buggies|trains?|locomotives?|automobiles?|vehicles?";
+
+  return (
+    new RegExp(
+      `\b(?:${vehicleNouns})\b[^.\n]{0,40}\b${escapedName}\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\b${escapedName}\b[^.\n]{0,40}\b(?:${vehicleNouns})\b`,
+      "i",
+    ).test(context) ||
+    new RegExp(
+      `\bsister\s+ship\b[^.\n]{0,20}\b${escapedName}\b|\b${escapedName}\b[^.\n]{0,20}\bsister\s+ship\b`,
+      "i",
+    ).test(context)
+  );
 }
 
 function hasCharacterContextCue(context: string) {
@@ -1425,21 +2633,11 @@ function inferCategory(
   const articleStrippedTokens = articleStrippedName
     .split(/\s+/)
     .filter(Boolean);
-  const looksLikePersonName =
-    tokens.length > 1 &&
-    !name.startsWith("The ") &&
-    !tokens.some((token) => connectorTokens.has(token.toLowerCase())) &&
-    !locationSuffixes.some(
-      (suffix) => name.endsWith(` ${suffix}`) || name === suffix,
-    ) &&
-    !organizationSuffixes.some(
-      (suffix) => name.endsWith(` ${suffix}`) || name === suffix,
-    );
-  const hasStrongItemEvidence = hasStrongSingleWordEvidence(
-    name,
-    "item",
-    context,
-  );
+  const looksLikePersonName = isLikelyPersonName(name);
+  const hasStrongItemEvidence =
+    tokens.length === 1
+      ? hasStrongSingleWordEvidence(name, "item", context)
+      : false;
   const hasStrongLocationEvidence = hasStrongSingleWordEvidence(
     name,
     "location",
@@ -1450,6 +2648,26 @@ function inferCategory(
     "character",
     context,
   );
+
+  if (isNamedAnimalReference(name, context)) {
+    return "character";
+  }
+
+  if (isAnimalKindName(name)) {
+    return "item";
+  }
+
+  if (isPlantKindName(name)) {
+    return "item";
+  }
+
+  if (isNamedEventName(name)) {
+    return "item";
+  }
+
+  if (tokens.length === 1 && hasBlockedSingleWordTokenRole(name, context)) {
+    return null;
+  }
 
   if (tokens.length === 1) {
     if (hasStrongItemEvidence) {
@@ -1467,6 +2685,16 @@ function inferCategory(
     if (hasStrongCharacterEvidence) {
       return "character";
     }
+  }
+
+  // "Lisa Britton's House" / "John's Office" → location, not character
+  if (
+    new RegExp(
+      `['']s\\s+(?:${possessiveLocationNouns.join("|")})\\s*$`,
+      "i",
+    ).test(name)
+  ) {
+    return "location";
   }
 
   if (
@@ -1504,6 +2732,30 @@ function inferCategory(
 
   if (hasStrongItemEvidence) {
     return "item";
+  }
+
+  if (looksLikePersonName && hasCharacterCue) {
+    return "character";
+  }
+
+  if (isDemonymModifierFragment(name, context)) {
+    return null;
+  }
+
+  if (isFamilyCollectiveReference(name, context)) {
+    return null;
+  }
+
+  if (hasPublicationOrWorkContext(name, context)) {
+    return "item";
+  }
+
+  if (isBusinessLocationName(name)) {
+    return "location";
+  }
+
+  if (isCollectivePeopleGroupName(name)) {
+    return "organization";
   }
 
   if (
@@ -1571,29 +2823,265 @@ function normalizeProviderEntity(
       ? normalizeCharacterSummarySections(entity.summary)
       : entity.summary;
 
-  if (
+  function hasAliasAwareOpeningCharacterFocus(
+    entity: ScanResult["entities"][number],
+    chapterText: string,
+  ) {
+    const firstParagraph = getFirstNonEmptyParagraph(chapterText);
+    if (!firstParagraph) {
+      return false;
+    }
+
+    const referenceNames = [entity.name, ...entity.aliases]
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const referenceCandidates = [
+      ...new Set(
+        referenceNames.flatMap((value) =>
+          buildCharacterReferenceCandidates(value),
+        ),
+      ),
+    ].sort((left, right) => right.length - left.length);
+
+    if (referenceCandidates.length === 0) {
+      return false;
+    }
+
+    const firstReferenceIndex = findFirstCharacterReferenceIndex(
+      entity.name,
+      firstParagraph,
+    );
+    if (
+      firstReferenceIndex === null ||
+      firstReferenceIndex > maxOpeningPovReferenceDistance
+    ) {
+      return false;
+    }
+
+    const openingWindow = firstParagraph.slice(
+      firstReferenceIndex,
+      firstReferenceIndex + 700,
+    );
+    const explicitMentionCount =
+      openingWindow.match(
+        new RegExp(
+          `\\b(?:${referenceCandidates.map((candidate) => escapeRegExp(candidate)).join("|")})\\b`,
+          "gi",
+        ),
+      )?.length ?? 0;
+    const pronounCount =
+      openingWindow.match(/\b(?:he|him|his|she|her|hers)\b/gi)?.length ?? 0;
+    const openingCueWindow = openingWindow.slice(0, 260);
+    const hasFocusCue =
+      hasAppearanceDetailCue(openingCueWindow) ||
+      hasOutfitDetailCue(openingCueWindow) ||
+      /\b(thought|wondered|knew|hoped|missed|wanted|liked|loved|hated|felt|remembered)\b/i.test(
+        openingCueWindow,
+      );
+
+    return (
+      hasFocusCue &&
+      explicitMentionCount >= 1 &&
+      (explicitMentionCount >= 2 || pronounCount >= 2)
+    );
+  }
+  const pointOfViewEligible =
     entity.category === "character" &&
+    !entity.isStub &&
+    !isNamedAnimalReference(entity.name, chapterText) &&
+    !/\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/i.test(
+      normalizedSummary,
+    );
+  const hasOnlyReportedMentions = chapterHasOnlyReportedCharacterMentions(
+    entity.name,
+    chapterText,
+  );
+  const hasValidatedPointOfViewEvidence =
+    !hasOnlyReportedMentions &&
+    pointOfViewEligible &&
+    (isLikelyPointOfViewCharacter(entity.name, chapterText) ||
+      hasAliasAwareOpeningCharacterFocus(entity, chapterText));
+
+  if (
+    pointOfViewEligible &&
+    summaryHasExplicitMainCharacterCue(normalizedSummary) &&
+    !hasValidatedPointOfViewEvidence
+  ) {
+    normalizedSummary = removeUnsupportedPointOfViewCue(normalizedSummary);
+  }
+
+  if (
+    pointOfViewEligible &&
     !summaryHasExplicitMainCharacterCue(normalizedSummary) &&
-    isLikelyPointOfViewCharacter(entity.name, chapterText)
+    hasValidatedPointOfViewEvidence
   ) {
     normalizedSummary = addPointOfViewCueToCharacterSummary(normalizedSummary);
   }
 
-  const normalizedName =
+  const rawName = entity.name.trim();
+  const rawNameMatch = findFirstNameMatch(rawName, chapterText);
+  const expandedWorkLikeName = expandWorkLikeNameFromChapterContext(
+    rawName,
+    chapterText,
+  );
+  const sanitizedRawName = sanitizeMatchedName(rawName);
+  let normalizedName =
     entity.category === "character"
-      ? normalizeCharacterName(entity.name)
-      : entity.name.trim();
+      ? expandedWorkLikeName !== sanitizedRawName &&
+        !isLikelyPersonName(sanitizedRawName)
+        ? expandedWorkLikeName
+        : normalizeCharacterName(entity.name)
+      : expandEntityNameFromChapterContext(
+          entity.name,
+          entity.category,
+          chapterText,
+        );
+
+  if (entity.category !== "character" && rawNameMatch?.snippet) {
+    const titledWorkMatch = new RegExp(
+      `\\b${escapeRegExp(rawName)}\\s+for\\s+[A-Z][A-Za-z'-]+(?:\\s+[A-Z][A-Za-z'-]+){0,3}\\b`,
+      "i",
+    ).exec(rawNameMatch.snippet);
+    if (titledWorkMatch?.[0]) {
+      normalizedName = sanitizeMatchedName(titledWorkMatch[0]);
+    }
+
+    if (entity.category === "location") {
+      const appositiveCanonicalName = findAppositiveLocationCanonicalName(
+        rawName,
+        rawNameMatch.snippet,
+      );
+      if (appositiveCanonicalName) {
+        normalizedName = appositiveCanonicalName;
+      }
+    }
+  }
+
+  if (entity.category === "location") {
+    const descriptiveRootName = findDescriptiveLocationRootName(
+      normalizedName,
+      chapterText,
+    );
+    if (descriptiveRootName) {
+      normalizedName = descriptiveRootName;
+    }
+  }
+
+  const matchForSubtype = findFirstNameMatch(normalizedName, chapterText);
+  const inferredItemSubtype =
+    entity.category === "item"
+      ? inferItemSubtype(normalizedName, matchForSubtype?.snippet ?? "")
+      : null;
+  const normalizedItemSubtype =
+    entity.category === "item"
+      ? entity.itemSubtype && entity.itemSubtype !== "Other"
+        ? entity.itemSubtype
+        : (inferredItemSubtype ?? entity.itemSubtype)
+      : null;
   const normalizedEntity =
-    normalizedName === entity.name && normalizedSummary === entity.summary
+    normalizedName === entity.name &&
+    normalizedSummary === entity.summary &&
+    (entity.itemSubtype ?? null) === normalizedItemSubtype &&
+    JSON.stringify(
+      normalizeEntityAliases(entity.aliases, normalizedName, entity.category),
+    ) === JSON.stringify(entity.aliases)
       ? entity
-      : { ...entity, name: normalizedName, summary: normalizedSummary };
+      : {
+          ...entity,
+          name: normalizedName,
+          summary: normalizedSummary,
+          aliases: normalizeEntityAliases(
+            entity.aliases,
+            normalizedName,
+            entity.category,
+          ),
+          itemSubtype: normalizedItemSubtype,
+        };
 
   const match = findFirstNameMatch(normalizedEntity.name, chapterText);
   const hasCharacterEvidence =
     normalizedEntity.aliases.length > 0 || normalizedEntity.links.length > 0;
   const inferredCategory = match
-    ? inferCategory(normalizedEntity.name, match.snippet)
-    : null;
+    ? (inferCategory(normalizedEntity.name, match.snippet) ??
+      inferCategory(normalizedEntity.name, chapterText))
+    : inferCategory(normalizedEntity.name, chapterText);
+  const publicationContext =
+    hasPublicationOrWorkContext(normalizedEntity.name, match?.snippet ?? "") ||
+    hasPublicationOrWorkContext(normalizedEntity.name, chapterText);
+  const vehicleContext =
+    hasVehicleContext(normalizedEntity.name, match?.snippet ?? "") ||
+    hasVehicleContext(normalizedEntity.name, chapterText);
+  const namedAnimalContext =
+    isNamedAnimalReference(normalizedEntity.name, match?.snippet ?? "") ||
+    isNamedAnimalReference(normalizedEntity.name, chapterText);
+  const strongHumanContext =
+    isLikelyPersonName(normalizedEntity.name) &&
+    parseSentencesWithGrammar(match?.snippet ?? "").some((sentence) =>
+      hasHumanSentenceRole(normalizedEntity.name, sentence),
+    );
+
+  if (namedAnimalContext && normalizedEntity.category !== "character") {
+    return applyUserCanonDecisionToEntity({
+      ...normalizedEntity,
+      category: "character",
+      itemSubtype: null,
+    });
+  }
+
+  if (
+    publicationContext &&
+    !strongHumanContext &&
+    (!isLikelyPersonName(normalizedEntity.name) ||
+      normalizedEntity.category === "item")
+  ) {
+    return applyUserCanonDecisionToEntity({
+      ...normalizedEntity,
+      category: "item",
+      itemSubtype:
+        normalizedEntity.itemSubtype ??
+        inferItemSubtype(normalizedEntity.name, match?.snippet ?? "") ??
+        "Publications",
+    });
+  }
+
+  if (
+    vehicleContext &&
+    !strongHumanContext &&
+    normalizedEntity.category !== "character"
+  ) {
+    return applyUserCanonDecisionToEntity({
+      ...normalizedEntity,
+      category: "item",
+      itemSubtype: normalizedEntity.itemSubtype ?? "Vehicles",
+    });
+  }
+
+  if (
+    normalizedEntity.category === "item" &&
+    normalizedEntity.itemSubtype &&
+    normalizedEntity.itemSubtype !== "Other" &&
+    inferredCategory &&
+    inferredCategory !== "item"
+  ) {
+    return applyUserCanonDecisionToEntity(normalizedEntity);
+  }
+
+  if (
+    normalizedEntity.category === "location" &&
+    normalizedEntity.name.split(/\s+/).length === 1 &&
+    hasChapterWideSingleWordEvidence(
+      normalizedEntity.name,
+      "location",
+      chapterText,
+    ) &&
+    !hasChapterWideSingleWordEvidence(
+      normalizedEntity.name,
+      "character",
+      chapterText,
+    )
+  ) {
+    return applyUserCanonDecisionToEntity(normalizedEntity);
+  }
 
   if (
     normalizedEntity.category === "character" &&
@@ -1623,10 +3111,27 @@ function normalizeProviderEntity(
     return applyUserCanonDecisionToEntity(normalizedEntity);
   }
 
+  if (
+    normalizedEntity.category === "item" &&
+    inferredCategory === "character" &&
+    (normalizedEntity.itemSubtype === "Publications" ||
+      inferredItemSubtype === "Publications" ||
+      publicationContext) &&
+    !namedAnimalContext &&
+    !strongHumanContext
+  ) {
+    return applyUserCanonDecisionToEntity(normalizedEntity);
+  }
+
   if (inferredCategory && inferredCategory !== normalizedEntity.category) {
     return applyUserCanonDecisionToEntity({
       ...normalizedEntity,
       category: inferredCategory,
+      itemSubtype:
+        inferredCategory === "item"
+          ? (normalizedEntity.itemSubtype ??
+            inferItemSubtype(normalizedEntity.name, match?.snippet ?? ""))
+          : null,
     });
   }
 
@@ -1643,9 +3148,9 @@ function getParagraphSnippet(text: string, index: number) {
 function getFirstNonEmptyParagraph(text: string) {
   return (
     text
-      .split(/\n+/)
+      .split(/\n\s*\n+/)
       .map((segment) => segment.replace(/\s+/g, " ").trim())
-      .find(Boolean) ?? ""
+      .find((segment) => Boolean(segment) && !/^#\s+/.test(segment)) ?? ""
   );
 }
 
@@ -1675,6 +3180,94 @@ function sentenceHasCharacterPronoun(sentence: string) {
   return /\b(he|him|his|she|her|hers)\b/i.test(sentence);
 }
 
+function hasReportedReferenceCue(text: string, name: string) {
+  const firstReferenceIndex = findFirstCharacterReferenceIndex(name, text);
+  if (firstReferenceIndex === null) {
+    return false;
+  }
+
+  const leadingWindow = text.slice(
+    Math.max(0, firstReferenceIndex - 60),
+    firstReferenceIndex,
+  );
+  const trailingWindow = text.slice(
+    firstReferenceIndex,
+    firstReferenceIndex + 80,
+  );
+
+  return (
+    /\b(?:said|says|tell|told|heard|hear|hears|hearing|swore|sworn|claimed|claim|claims|rumor|rumors|named|name|mention|mentioned|mentions|agreed|agree|asked|ask|asks|shouted|yelled|whispered|blamed|blame)\b/i.test(
+      leadingWindow,
+    ) ||
+    /\b(?:what|why|whether)\b/i.test(leadingWindow) ||
+    /\bworking\s+for\b/i.test(leadingWindow) ||
+    /["“”]/i.test(text) ||
+    /\b(?:made\s+(?:me|him|her|them)|paid\s+(?:him|her|them)|wanted|want(?:ed|s)?)\b/i.test(
+      trailingWindow,
+    )
+  );
+}
+
+function chapterHasOnlyReportedCharacterMentions(
+  name: string,
+  chapterText: string,
+) {
+  const mentioningSentences = parseSentencesWithGrammar(chapterText).filter(
+    (sentence) => sentenceMentionsCharacterReference(sentence.text, name),
+  );
+
+  if (mentioningSentences.length === 0) {
+    return false;
+  }
+
+  return mentioningSentences.every(
+    (sentence) =>
+      hasReportedReferenceCue(sentence.text, name) &&
+      !hasAppearanceDetailCue(sentence.text) &&
+      !hasOwnedOutfitDetail(sentence.text, true),
+  );
+}
+
+function hasOpeningNarrativePovThread(
+  name: string,
+  firstParagraph: string,
+  firstReferenceIndex: number,
+) {
+  const openingWindow = firstParagraph.slice(
+    firstReferenceIndex,
+    firstReferenceIndex + 700,
+  );
+  const candidates = buildCharacterReferenceCandidates(name).sort(
+    (left, right) => right.length - left.length,
+  );
+  const explicitMentionCount =
+    openingWindow.match(
+      new RegExp(
+        `\\b(?:${candidates.map((candidate) => escapeRegExp(candidate)).join("|")})\\b`,
+        "gi",
+      ),
+    )?.length ?? 0;
+  const pronounFollowUpCount =
+    openingWindow.match(/\b(?:he|him|his|she|her|hers)\b/gi)?.length ?? 0;
+  const detailSignalCount = [
+    hasAppearanceDetailCue(openingWindow),
+    hasOutfitDetailCue(openingWindow),
+    /\b(thought|wondered|knew|hoped|missed|wanted|liked|loved|hated|felt|remembered)\b/i.test(
+      openingWindow,
+    ),
+  ].filter(Boolean).length;
+
+  if (hasReportedReferenceCue(openingWindow, name)) {
+    return false;
+  }
+
+  return (
+    explicitMentionCount >= 1 &&
+    (pronounFollowUpCount >= 2 || explicitMentionCount >= 2) &&
+    detailSignalCount >= 1
+  );
+}
+
 function countCharacterReferenceHits(name: string, chapterText: string) {
   return buildCharacterReferenceCandidates(name).reduce((count, candidate) => {
     const matches = chapterText.match(
@@ -1684,6 +3277,21 @@ function countCharacterReferenceHits(name: string, chapterText: string) {
   }, 0);
 }
 
+function findFirstCharacterReferenceIndex(name: string, text: string) {
+  let earliestIndex = Number.POSITIVE_INFINITY;
+
+  for (const candidate of buildCharacterReferenceCandidates(name)) {
+    const match = new RegExp(`\\b${escapeRegExp(candidate)}\\b`, "i").exec(
+      text,
+    );
+    if (match?.index !== undefined) {
+      earliestIndex = Math.min(earliestIndex, match.index);
+    }
+  }
+
+  return Number.isFinite(earliestIndex) ? earliestIndex : null;
+}
+
 function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
   if (!chapterText) {
     return false;
@@ -1691,20 +3299,55 @@ function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
 
   const firstParagraph = getFirstNonEmptyParagraph(chapterText);
   const firstParagraphSentences = parseSentencesWithGrammar(firstParagraph);
-  const firstReferenceMatch = findFirstNameMatch(name, firstParagraph);
+  const firstReferenceIndex = findFirstCharacterReferenceIndex(
+    name,
+    firstParagraph,
+  );
 
-  if (!firstReferenceMatch || firstReferenceMatch.index > 120) {
+  if (
+    firstReferenceIndex === null ||
+    firstReferenceIndex > maxOpeningPovReferenceDistance
+  ) {
     return false;
   }
 
-  const firstSentence = firstParagraphSentences[0];
-  if (!firstSentence || !subjectEndsWithReference(firstSentence, name)) {
+  const hasFallbackPovThread = hasOpeningNarrativePovThread(
+    name,
+    firstParagraph,
+    firstReferenceIndex,
+  );
+
+  const openingReferenceIndex = firstParagraphSentences.findIndex((sentence) =>
+    sentenceMentionsCharacterReference(sentence.text, name),
+  );
+
+  if (openingReferenceIndex === -1 || openingReferenceIndex > 2) {
+    return hasFallbackPovThread;
+  }
+
+  const openingReferenceSentence =
+    firstParagraphSentences[openingReferenceIndex];
+  if (!openingReferenceSentence) {
+    return hasFallbackPovThread;
+  }
+
+  if (hasReportedReferenceCue(openingReferenceSentence.text, name)) {
     return false;
   }
 
-  const firstSentenceVerbs = getNormalizedVerbTokens(firstSentence);
-  if (!firstSentenceVerbs.some((verb) => humanActionVerbs.has(verb))) {
-    return false;
+  const openingSentenceVerbs = getNormalizedVerbTokens(
+    openingReferenceSentence,
+  );
+  const openingSentenceSupportsPov =
+    subjectEndsWithReference(openingReferenceSentence, name) ||
+    hasAppearanceDetailCue(openingReferenceSentence.text) ||
+    hasOwnedOutfitDetail(openingReferenceSentence.text, true);
+
+  if (
+    !openingSentenceSupportsPov &&
+    !openingSentenceVerbs.some((verb) => humanActionVerbs.has(verb))
+  ) {
+    return hasFallbackPovThread;
   }
 
   let activeReferenceThread = false;
@@ -1713,7 +3356,9 @@ function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
     mentionsCharacter: boolean;
   }> = [];
 
-  for (const parsedSentence of firstParagraphSentences) {
+  for (const parsedSentence of firstParagraphSentences.slice(
+    openingReferenceIndex,
+  )) {
     const mentionsCharacter = sentenceMentionsCharacterReference(
       parsedSentence.text,
       name,
@@ -1738,7 +3383,7 @@ function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
   }
 
   if (relevantSentences.length < 2) {
-    return false;
+    return hasFallbackPovThread;
   }
 
   const mentionCount = relevantSentences.filter(
@@ -1749,8 +3394,8 @@ function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
       !mentionsCharacter && sentenceHasCharacterPronoun(sentence),
   ).length;
 
-  if (mentionCount < 1 || pronounFollowUpCount < 2) {
-    return false;
+  if (mentionCount < 1 || (pronounFollowUpCount < 1 && mentionCount < 2)) {
+    return hasFallbackPovThread;
   }
 
   const hasFirstParagraphCharacterSignal = relevantSentences.some(
@@ -1761,10 +3406,12 @@ function isLikelyPointOfViewCharacter(name: string, chapterText: string) {
   );
 
   if (!hasFirstParagraphCharacterSignal) {
-    return false;
+    return hasFallbackPovThread;
   }
 
-  return countCharacterReferenceHits(name, chapterText) >= 6;
+  return (
+    countCharacterReferenceHits(name, chapterText) >= 2 || hasFallbackPovThread
+  );
 }
 
 function hasAppearanceDetailCue(sentence: string) {
@@ -1971,6 +3618,52 @@ function buildSupplementalSummary(
     ].join("\n");
   }
 
+  if (category === "location") {
+    return [
+      `# ${name}`,
+      "",
+      "## Core Status",
+      "- Type: Location",
+      "- Region / jurisdiction: Missing / unestablished",
+      "- First appearance: Current chapter snapshot",
+      "- Canon status: Unconfirmed",
+      "",
+      "## Description",
+      "### Confirmed physical details",
+      `- Current chapter snapshot: ${snippet || `${name} is named in the current chapter snapshot.`}`,
+      "### Probable / inferred",
+      "- None beyond the directly supported chapter wording yet.",
+      "### Missing / unestablished",
+      "- Fuller physical, political, social, and event-related details require later confirmation.",
+      "",
+      "## Function in Story",
+      "- Who controls it: Missing / unestablished",
+      "- Who frequents it: Missing / unestablished",
+      `- Narrative significance: ${name} is referenced in the current chapter snapshot.`,
+      "",
+      "## Notable Events",
+      "- Current chapter snapshot: Mentioned or on-page, but event detail remains thin.",
+      "",
+      "## Associated Characters",
+      "- Missing / unestablished",
+      "",
+      "## Layout / Spatial Notes",
+      "- Entrances/exits: Missing / unestablished",
+      "- Important rooms/areas: Missing / unestablished",
+      "- Sightlines / travel logic: Missing / unestablished",
+      "- Security / hazards: Missing / unestablished",
+      "",
+      "## Changes Over Time",
+      "- No chapter-local change over time established yet.",
+      "",
+      "## Contradictions / Ambiguities",
+      "- None yet, but details remain thin.",
+      "",
+      "## Sources",
+      "- Source: Current chapter snapshot",
+    ].join("\n");
+  }
+
   return [
     "## Core Status",
     `- Name: ${name}`,
@@ -2012,11 +3705,11 @@ function collectSupplementalEntities(
     const normalized = name.trim().toLowerCase();
     const slug = makeSlug(name);
 
-    if (!normalized || existingEntitySlugs.has(slug)) {
+    if (!normalized) {
       return false;
     }
 
-    return [
+    const matchesCurrentEntities = [
       ...existingEntities,
       ...Array.from(found.entries())
         .filter(([key]) => key !== currentKey)
@@ -2037,6 +3730,23 @@ function collectSupplementalEntities(
         return true;
       }
 
+      if (entity.category === "organization") {
+        // "The Empire" → matches "Andrittan Empire" (article-stripped suffix word overlap)
+        const candidateStripped = stripLeadingArticle(normalized);
+        const entityTokens = entity.name
+          .trim()
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean);
+        if (
+          candidateStripped &&
+          entityTokens.some((t) => t === candidateStripped)
+        ) {
+          return true;
+        }
+        return false;
+      }
+
       if (entity.category !== "character") {
         return false;
       }
@@ -2049,6 +3759,16 @@ function collectSupplementalEntities(
 
       return tokens.length > 1 && tokens.includes(normalized);
     });
+
+    if (matchesCurrentEntities) {
+      return true;
+    }
+
+    if (existingEntitySlugs.has(slug)) {
+      return false;
+    }
+
+    return false;
   }
 
   function findUpgradeableCharacterKey(name: string) {
@@ -2103,9 +3823,13 @@ function collectSupplementalEntities(
       (!hasChapterWideCharacterEvidence || hasPlaceNameMorphology(cleaned))
         ? "location"
         : category;
+    const resolvedName =
+      resolvedCategory === "location"
+        ? expandPossessiveBusinessNameFromChapterContext(cleaned, chapterText)
+        : cleaned;
     const canonicalName = upgradeKey
-      ? (found.get(upgradeKey)?.name ?? cleaned)
-      : cleaned;
+      ? (found.get(upgradeKey)?.name ?? resolvedName)
+      : resolvedName;
     const snippet = getSnippet(chapterText, index, canonicalName.length);
     const key =
       upgradeKey ?? `${resolvedCategory}:${canonicalName.toLowerCase()}`;
@@ -2129,6 +3853,8 @@ function collectSupplementalEntities(
       !cleaned ||
       singleWordStoplist.has(cleaned) ||
       !hasPlausibleTokenShape(cleaned) ||
+      (cleaned.split(/\s+/).length === 1 &&
+        hasBlockedSingleWordTokenRole(cleaned, snippet)) ||
       existingKeys.has(key) ||
       (!upgradeKey && matchesExistingEntityReference(cleaned, key)) ||
       shouldDropSingleWordLocationCharacterCollision(
@@ -2142,6 +3868,28 @@ function collectSupplementalEntities(
         },
         [...existingEntities, ...Array.from(found.values())],
         existingEntitySlugs,
+      ) ||
+      shouldDropCoreNameDuplicate(
+        {
+          name: cleaned,
+          category: resolvedCategory,
+          summary: "",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+        [...existingEntities, ...Array.from(found.values())],
+      ) ||
+      shouldDropHonorificSurnameDuplicate(
+        {
+          name: cleaned,
+          category: resolvedCategory,
+          summary: "",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+        [...existingEntities, ...Array.from(found.values())],
       ) ||
       (!upgradeKey &&
         cleaned.split(/\s+/).length === 1 &&
@@ -2157,9 +3905,13 @@ function collectSupplementalEntities(
       return;
     }
 
-    const entity = applyUserCanonDecisionToEntity({
+    const supplementalCandidate: ScanResult["entities"][number] = {
       name: canonicalName,
       category: resolvedCategory,
+      itemSubtype:
+        resolvedCategory === "item"
+          ? inferItemSubtype(canonicalName, snippet)
+          : null,
       summary: buildSupplementalSummary(
         canonicalName,
         resolvedCategory,
@@ -2171,7 +3923,9 @@ function collectSupplementalEntities(
       isStub: true,
       aliases: [],
       links: [],
-    });
+    };
+
+    const entity = applyUserCanonDecisionToEntity(supplementalCandidate);
 
     if (!entity) {
       return;
@@ -2185,7 +3939,7 @@ function collectSupplementalEntities(
   }
 
   const multiWordPattern =
-    /\b(?:The\s+)?[A-Z][a-z]+(?:\s+(?:[A-Z][a-z]+|of|the))*\b/g;
+    /\b(?:The\s+)?(?:Ms\.|Mrs\.|Miss|Mr\.|Dr\.|Doctor|Sir|Lady|Lord|[A-Z][A-Za-z]+(?:['’][A-Za-z]+)?)(?:\s+(?:Ms\.|Mrs\.|Miss|Mr\.|Dr\.|Doctor|Sir|Lady|Lord|[A-Z][A-Za-z]+(?:['’][A-Za-z]+)?|of|the|and|for))*\b/g;
   for (const match of chapterText.matchAll(multiWordPattern)) {
     const name = sanitizeMatchedName(match[0]);
     if (name.split(/\s+/).length < 2 || /^Chapter\s+\d+$/i.test(name)) {
@@ -2263,15 +4017,30 @@ export function normalizeScanResult(
     const aliasMatch = entity.aliases.some((alias) =>
       appearsInChapterText(alias, chapterText),
     );
+    const existingEntityGrounding = hasExistingEntityGrounding(
+      entity,
+      chapterText,
+    );
     const hasStandaloneSingleWord =
       entity.name.split(/\s+/).length === 1
         ? hasStandaloneSingleWordOccurrence(entity.name, chapterText)
         : true;
 
     if (
+      (entity.category === "item" &&
+        ["Animals", "Plants"].includes(entity.itemSubtype ?? "") &&
+        !existingEntitySlugs.has(makeSlug(entity.name)) &&
+        !isAnimalKindName(entity.name) &&
+        !isPlantKindName(entity.name)) ||
+      shouldDropMultiWordCharacterTitleTailCollision(
+        entity,
+        dedupedEntities,
+        chapterText,
+      ) ||
       !hasPlausibleTokenShape(entity.name) ||
       shouldDropAsPartialDuplicate(entity, dedupedEntities) ||
       shouldDropCoreNameDuplicate(entity, dedupedEntities) ||
+      shouldDropRoleDescriptorCharacter(entity) ||
       shouldDropHonorificSurnameDuplicate(entity, dedupedEntities) ||
       shouldDropSingleWordCharacterAliasCollision(
         entity,
@@ -2283,6 +4052,12 @@ export function normalizeScanResult(
         dedupedEntities,
         existingEntitySlugs,
       ) ||
+      shouldDropSingleWordCharacterItemTitleCollision(
+        entity,
+        dedupedEntities,
+        chapterText,
+      ) ||
+      shouldDropCharacterAliasDuplicate(entity, dedupedEntities) ||
       (entity.category === "character" &&
         entity.name.split(/\s+/).length === 1 &&
         !existingEntitySlugs.has(makeSlug(entity.name)) &&
@@ -2330,7 +4105,8 @@ export function normalizeScanResult(
       !chapterText ||
       appearsInChapterText(entity.name, chapterText) ||
       aliasMatch ||
-      existingEntitySlugs.has(makeSlug(entity.name))
+      (existingEntitySlugs.has(makeSlug(entity.name)) &&
+        existingEntityGrounding)
     );
   });
 
@@ -2338,16 +4114,50 @@ export function normalizeScanResult(
     ? enrichCharacterAliasesFromContext(groundedEntities, chapterText)
     : groundedEntities;
 
+  const groundedEntitiesWithoutAliasDuplicates =
+    groundedEntitiesWithAliases.filter(
+      (entity) =>
+        !shouldDropAliasDuplicate(entity, groundedEntitiesWithAliases),
+    );
+
   const supplementedEntities = chapterText
     ? collectSupplementalEntities(
         chapterText,
-        groundedEntitiesWithAliases,
+        groundedEntitiesWithoutAliasDuplicates,
         existingEntitySlugs,
       )
     : [];
 
+  const allEntities = [
+    ...groundedEntitiesWithoutAliasDuplicates,
+    ...supplementedEntities,
+  ];
+  const finalEntitiesWithAliases = chapterText
+    ? mergeAppositiveLocationEntities(
+        enrichCharacterAliasesFromContext(allEntities, chapterText),
+        chapterText,
+      )
+    : allEntities;
+  const finalEntities = finalEntitiesWithAliases.filter(
+    (entity) =>
+      !shouldDropAliasDuplicate(entity, finalEntitiesWithAliases) &&
+      !shouldDropCoreNameDuplicate(entity, finalEntitiesWithAliases) &&
+      !shouldDropRoleDescriptorCharacter(entity) &&
+      !shouldDropSingleWordCharacterItemTitleCollision(
+        entity,
+        finalEntitiesWithAliases,
+        chapterText,
+      ) &&
+      !shouldDropMultiWordCharacterTitleTailCollision(
+        entity,
+        finalEntitiesWithAliases,
+        chapterText,
+      ) &&
+      !shouldDropItemTitleFragmentDuplicate(entity, finalEntitiesWithAliases),
+  );
+
   return {
     ...parsed,
-    entities: [...groundedEntitiesWithAliases, ...supplementedEntities],
+    entities: mergeCanonicalDuplicateEntities(finalEntities),
   };
 }

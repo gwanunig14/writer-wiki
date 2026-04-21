@@ -512,9 +512,6 @@
   }
 
   .continuity-items {
-    margin: 1rem 0 1.25rem;
-    padding: 1rem;
-    border-radius: 1rem;
     background: rgba(111, 77, 45, 0.06);
   }
 

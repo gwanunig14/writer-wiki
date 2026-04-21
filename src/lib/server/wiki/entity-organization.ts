@@ -81,7 +81,35 @@ function inferItemSegments(entity: EntitySummaryRecord) {
     return parseSubtypePath(entity.subtype);
   }
 
-  if (/\bhorse|destrier|mare|stallion|gelding|mount|rides?\b/.test(text)) {
+  if (
+    /\bball|balls|festival|festivals|ceremony|ceremonies|feast|feasts|party|parties|war|wars\b/.test(
+      text,
+    )
+  ) {
+    return ["Events"];
+  }
+
+  if (
+    /\bhorse|horses|destrier|destriers|mare|mares|stallion|stallions|gelding|geldings|panther|panthers|viper|vipers|wolf|wolves|dog|dogs|cat|cats|bird|birds|hawk|hawks|falcon|falcons|eagle|eagles|boar|boars|bear|bears|serpent|serpents|spider|spiders|beast|beasts|creature|creatures|animal|animals\b/.test(
+      text,
+    )
+  ) {
+    return ["Animals"];
+  }
+
+  if (
+    /\bbloom|blooms|blossom|blossoms|briar|briars|daisy|daisies|fern|ferns|flower|flowers|herb|herbs|ivy|lily|lilies|moss|orchid|orchids|petal|petals|reed|reeds|rose|roses|thorn|thorns|vine|vines|weed|weeds\b/.test(
+      text,
+    )
+  ) {
+    return ["Plants"];
+  }
+
+  if (
+    /\bcart|carriage|wagon|coach|buggy|boat|ship|train|locomotive|automobile|vehicle\b/.test(
+      text,
+    )
+  ) {
     return ["Vehicles"];
   }
 
@@ -219,7 +247,8 @@ function buildLocationFolderSegments(
       parentById.set(location.id, location.parentEntityId);
     }
   }
-  for (const [childId, parentId] of inferLocationParents(locations)) {
+  const inferredParentById = inferLocationParents(locations);
+  for (const [childId, parentId] of inferredParentById) {
     if (!parentById.has(childId)) {
       parentById.set(childId, parentId);
     }
@@ -251,7 +280,7 @@ function buildLocationFolderSegments(
     return hasChildren ? [...segments, entity.name] : segments;
   }
 
-  return hasChildren ? [entity.name] : ["Unplaced"];
+  return hasChildren ? [entity.name] : ["Location uncertain"];
 }
 
 export function getEntityFolderSegments(

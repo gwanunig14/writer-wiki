@@ -24,6 +24,7 @@ describe("scan pipeline", () => {
     process.env.ACK_DATA_DIR = testRoot;
     process.env.ACK_DB_PATH = join(testRoot, "author-canon-keeper.sqlite");
     process.env.ACK_PROJECT_DATA_DIR = join(testRoot, "project-data");
+    mkdirSync(testRoot, { recursive: true });
     migrate();
   });
 
@@ -117,6 +118,11 @@ describe("scan pipeline", () => {
     expect(normalized.entities.some((entity) => entity.name === "Fleck")).toBe(
       true,
     );
+    expect(
+      normalized.entities.some(
+        (entity) => entity.name === "Fleck" && entity.category === "character",
+      ),
+    ).toBe(true);
     expect(
       normalized.entities.some((entity) => entity.name === "The Warm Hearth"),
     ).toBe(true);
@@ -357,6 +363,905 @@ describe("scan pipeline", () => {
     }
   });
 
+  it("suppresses discourse-word supplemental entities and preserves publication items", () => {
+    const chapterText = [
+      "Their orange glow cast a variety of flickering shadows on every building.",
+      "Furthermore, the only men who called on young ladies at this hour did so with expectations.",
+      "Especially if he asked where the shootout was rather than where she was.",
+      "For your information, there's a current serial in Twice Monthly called Fortunes of Fate that I'm positively addicted to.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Twice Monthly",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "A periodical publication.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Fortunes of Fate",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "A serial story.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.find((entity) => entity.name === "Twice Monthly")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Twice Monthly")
+        ?.itemSubtype,
+    ).toBe("Publications");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Fortunes of Fate")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Fortunes of Fate")
+        ?.itemSubtype,
+    ).toBe("Publications");
+
+    for (const junkName of ["Their", "Furthermore", "Especially"]) {
+      expect(
+        normalized.entities.some((entity) => entity.name === junkName),
+      ).toBe(false);
+    }
+  });
+
+  it("supplements titled works as publication items instead of character stubs", () => {
+    const chapterText =
+      "For your information, there is a current serial in Twice Monthly called Fortunes of Fate that I am positively addicted to.";
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const twiceMonthly = normalized.entities.find(
+      (entity) => entity.name === "Twice Monthly",
+    );
+    const fortunesOfFate = normalized.entities.find(
+      (entity) => entity.name === "Fortunes of Fate",
+    );
+
+    expect(twiceMonthly?.category).toBe("item");
+    expect(twiceMonthly?.itemSubtype).toBe("Publications");
+    expect(fortunesOfFate?.category).toBe("item");
+    expect(fortunesOfFate?.itemSubtype).toBe("Publications");
+  });
+
+  it("classifies chapter 3 style events, businesses, and aliases conservatively", () => {
+    const chapterText = [
+      "The Vistan crystal lights were off and uselessly lined the walkway.",
+      "First stop was Reuel's General Store.",
+      "Finally, the Red Booth.",
+      "The Baron Kinborough's Spring's Awakening Ball is tonight.",
+      "She had been looking forward to it for the six weeks since the Midwinter Ball.",
+      "At 'The Arrival of Winter Ball,' Lady Stewart wore a dress that showed her ankles.",
+      "Ms. Patricia. The Witch.",
+      "Had Aunt Matilda finally decided to tell her about the money?",
+      "Whatever Felix had been up to smelled amazing.",
+      "But Iris kept walking.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Ms. Patricia",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "The Vistan" && entity.category === "organization",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Reuel's General Store" &&
+          entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Red Booth" && entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Spring's Awakening Ball" &&
+          entity.category === "item",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Midwinter Ball" && entity.category === "item",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "The Arrival of Winter Ball" &&
+          entity.category === "item",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.find((entity) => entity.name === "Ms Patricia")
+        ?.aliases ?? [],
+    ).toContain("The Witch");
+    expect(
+      normalized.entities.some((entity) => entity.name === "The Witch"),
+    ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "General Store"),
+    ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Awakening Ball"),
+    ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "But Iris"),
+    ).toBe(false);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Aunt Matilda" && entity.category === "character",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Whatever Felix"),
+    ).toBe(false);
+  });
+
+  it("does not treat ordinary named-person phrasing as publication context", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Every felon in the empire knew about The Warm Hearth, and Marcus was looking for one named Louis Porter.",
+    );
+
+    const louisPorter = normalized.entities.find(
+      (entity) => entity.name === "Louis Porter",
+    );
+
+    expect(louisPorter?.category).toBe("character");
+    expect(louisPorter?.itemSubtype).toBeNull();
+  });
+
+  it("normalizes possessive business names for supplemental locations", () => {
+    mkdirSync(join(testRoot, "project-data", "system"), { recursive: true });
+    writeFileSync(
+      join(testRoot, "project-data", "system", "user-canon-decisions.json"),
+      JSON.stringify([
+        {
+          matchNames: ["Hartwell", "Hartwell's"],
+          action: "override",
+          category: "location",
+          canonicalName: "Hartwell's",
+        },
+      ]),
+    );
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Jonathan pointed at Hartwell's, a restaurant the family knew well.",
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Hartwell's" && entity.category === "location",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Hartwell"),
+    ).toBe(false);
+  });
+
+  it("treats lake-named places as locations when extracted from context", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Jasper Lake tea is delicious when it hasn't spent weeks in a shipping barrel.",
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Jasper Lake" && entity.category === "location",
+      ),
+    ).toBe(true);
+  });
+
+  it("reclassifies ship-like provider locations as vehicle items", () => {
+    mkdirSync(join(testRoot, "project-data", "system"), { recursive: true });
+    writeFileSync(
+      join(testRoot, "project-data", "system", "user-canon-decisions.json"),
+      JSON.stringify([
+        {
+          matchNames: ["The Ivory Crown"],
+          action: "override",
+          category: "item",
+          itemSubtype: "Vehicles",
+          canonicalName: "The Ivory Crown",
+        },
+      ]),
+    );
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "The Ivory Crown",
+            category: "location",
+            summary: "A place mentioned in the chapter.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Scarlet would have been unmatched in all of Vistana except that it was coming alongside its sister ship, The Ivory Crown.",
+    );
+
+    expect(normalized.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "The Ivory Crown",
+          category: "item",
+          itemSubtype: "Vehicles",
+        }),
+      ]),
+    );
+  });
+
+  it("drops single-word kinship aliases from provider character entries", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Emperor Darius IV",
+            category: "character",
+            summary: "The emperor and father of Gabrielle.",
+            isStub: true,
+            aliases: ["Papa"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Gabrielle hadn't seen Emperor Darius IV in three years. Papa was dying.",
+    );
+
+    expect(normalized.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Emperor Darius IV",
+          aliases: [],
+        }),
+      ]),
+    );
+  });
+
+  it("clears item subtypes from non-item provider entities", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "The Empire",
+            category: "organization",
+            itemSubtype: "Other",
+            summary: "A political entity.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "The Empire's politics touched every household in Vistana.",
+    );
+
+    expect(normalized.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "The Empire",
+          category: "organization",
+          itemSubtype: null,
+        }),
+      ]),
+    );
+  });
+
+  it("does not extract demonym modifiers as standalone organizations", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "The Vistanan court can be quite dull in peacetime.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "The Vistanan"),
+    ).toBe(false);
+  });
+
+  it("expands clipped provider event and work titles from chapter context", () => {
+    const chapterText = [
+      "Ms. Patricia reminded Iris that the Baron Kinborough's 'Spring's Awakening Ball' was tonight.",
+      "Professor Tarvil praised her reading of the symbolism in Elegy for Clark Rivers.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Awakening Ball",
+            category: "item",
+            itemSubtype: "Other",
+            summary: "A social event.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Elegy",
+            category: "location",
+            summary: "A place.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Spring's Awakening Ball" &&
+          entity.category === "item",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Elegy for Clark Rivers" &&
+          entity.category === "item" &&
+          entity.itemSubtype === "Publications",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Awakening Ball"),
+    ).toBe(false);
+    expect(normalized.entities.some((entity) => entity.name === "Elegy")).toBe(
+      false,
+    );
+  });
+
+  it("keeps provider publication titles as items and drops title fragments from chapter 3 prose", () => {
+    const chapterText = [
+      "She opened the new Twice Monthly.",
+      "One of its current serials, Fortunes of Fate, was all the rage and the author, Catherine Suffolk, had become famous.",
+      "Flanking Ms. Patricia were the day's dressing crew.",
+      "She had to agree with Ms. Patricia for once; at least she wasn't going anywhere in this anathema to fashion.",
+      "Professor Tarvil praised her reading of the symbolism in Elegy for Clark Rivers.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Twice Monthly",
+            category: "character",
+            summary: "A named entity.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Fortunes of Fate",
+            category: "character",
+            summary: "A named entity.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Clark Rivers",
+            category: "character",
+            summary: "A named entity.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Elegy for Clark Rivers",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "A literary work.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Patricia for",
+            category: "character",
+            summary: "A named entity.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Twice Monthly" &&
+          entity.category === "item" &&
+          entity.itemSubtype === "Publications",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Fortunes of Fate" &&
+          entity.category === "item" &&
+          entity.itemSubtype === "Publications",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Elegy for Clark Rivers" &&
+          entity.category === "item" &&
+          entity.itemSubtype === "Publications",
+      ),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Patricia for"),
+    ).toBe(false);
+    expect(normalized.entities.some((entity) => entity.name === "Elegy")).toBe(
+      false,
+    );
+    expect(normalized.entities.some((entity) => entity.name === "Clark")).toBe(
+      false,
+    );
+    expect(
+      normalized.entities.some((entity) => entity.name === "Clark Rivers"),
+    ).toBe(false);
+  });
+
+  it("reclassifies miscategorized provider people away from item when publication evidence is absent", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Bradford Wilson",
+            category: "item",
+            itemSubtype: "Other",
+            summary: "An inventor from Gralsha.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "An inventor in Gralsha named Bradford Wilson had posited that machines could be designed to build other machines in a factory.",
+    );
+
+    const bradfordWilson = normalized.entities.find(
+      (entity) => entity.name === "Bradford Wilson",
+    );
+
+    expect(bradfordWilson?.category).toBe("character");
+    expect(bradfordWilson?.itemSubtype).toBeNull();
+  });
+
+  it("does not add honorific-only aliases from dialogue context", () => {
+    const chapterText = [
+      'Marcus took her hand. "It\'s been nice to meet you, Miss...?"',
+      '"Essex. Mina Essex."',
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Mina Essex",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    expect(
+      normalized.entities.find((entity) => entity.name === "Marcus Day")
+        ?.aliases ?? [],
+    ).not.toContain("Miss Essex");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Mina Essex")
+        ?.aliases ?? [],
+    ).not.toContain("Miss Essex");
+  });
+
+  it("drops separate alias dossiers when another character already claims that alias", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Louis Porter",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: ["John Letterer"],
+            links: [],
+          },
+          {
+            name: "John Letterer",
+            category: "character",
+            summary: "Duplicate alias dossier.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Louis Porter played under the fake name John Letterer.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Louis Porter"),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "John Letterer"),
+    ).toBe(false);
+  });
+
+  it("drops honorific-only provider aliases during normalization", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Mina Essex",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: ["Miss Essex", "Mina"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Mina Essex returned home safely.",
+    );
+
+    const mina = normalized.entities.find(
+      (entity) => entity.name === "Mina Essex",
+    );
+
+    expect(mina?.aliases).toContain("Mina");
+    expect(mina?.aliases).not.toContain("Miss Essex");
+  });
+
+  it("does not create cross-category duplicates for existing publication items on rescans", () => {
+    const chapter = upsertChapter({
+      number: 2,
+      title: "Two",
+      text: "For your information, there's a current serial in Twice Monthly called Fortunes of Fate that I'm positively addicted to.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Twice Monthly",
+          category: "item",
+          itemSubtype: "Publications",
+          summary: "A periodical publication.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+        {
+          name: "Fortunes of Fate",
+          category: "item",
+          itemSubtype: "Publications",
+          summary: "A serial story.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Twice Monthly", "Fortunes of Fate"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Twice Monthly",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "A periodical publication.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Fortunes of Fate",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "A serial story.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: ["Twice Monthly", "Fortunes of Fate"],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapter.currentText,
+    );
+
+    expect(
+      normalized.entities.filter((entity) => entity.name === "Twice Monthly"),
+    ).toHaveLength(1);
+    expect(
+      normalized.entities.filter(
+        (entity) => entity.name === "Fortunes of Fate",
+      ),
+    ).toHaveLength(1);
+    expect(
+      normalized.entities.find((entity) => entity.name === "Twice Monthly")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Twice Monthly")
+        ?.itemSubtype,
+    ).toBe("Publications");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Fortunes of Fate")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Fortunes of Fate")
+        ?.itemSubtype,
+    ).toBe("Publications");
+
+    reconcileCanon(chapter.id, normalized);
+
+    expect(
+      listEntities().find((entity) => entity.name === "Twice Monthly")?.subtype,
+    ).toBe("Publications");
+    expect(
+      listEntities().find((entity) => entity.name === "Fortunes of Fate")
+        ?.subtype,
+    ).toBe("Publications");
+  });
+
   it("drops generic single-word provider character entries without proper-name evidence", () => {
     const chapterText = [
       "Women waited by the rail while Marcus asked about Louis.",
@@ -551,6 +1456,54 @@ describe("scan pipeline", () => {
     expect(shadowKing?.summary).not.toContain("Point-of-view character");
   });
 
+  it("does not mark reported or accusatory mentions as point-of-view focus", () => {
+    const chapterText = [
+      'Louis Porter shouted, "The Shadow King made me do it."',
+      "Marcus heard The Shadow King named again at the tavern.",
+      "Every rumor in the district led back to The Shadow King.",
+      "No one agreed on what The Shadow King wanted.",
+    ].join(" ");
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "The Shadow King",
+            category: "character",
+            summary: [
+              "## Core Status",
+              "- On-page character",
+              "- Chapter role: Point-of-view character in current chapter snapshot",
+              "",
+              "## Description",
+              "- Unconfirmed figure in local rumor.",
+            ].join("\n"),
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapterText,
+    );
+
+    const shadowKing = normalized.entities.find(
+      (entity) => entity.name === "The Shadow King",
+    );
+
+    expect(shadowKing?.summary).not.toContain("Point-of-view character");
+  });
+
   it("classifies possessive place references like Elton's townhouses as locations", () => {
     const chapterText = [
       "Another light caught his hazel eye, though, the only other one on the street, glowing in the upper window of a green house.",
@@ -584,6 +1537,9 @@ describe("scan pipeline", () => {
       normalized.entities.some(
         (entity) => entity.name === "Elton" && entity.category === "character",
       ),
+    ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "The Essexes"),
     ).toBe(false);
   });
 
@@ -662,6 +1618,92 @@ describe("scan pipeline", () => {
     ).toBe(true);
     expect(
       normalized.entities.some((entity) => entity.name === "John Essex"),
+    ).toBe(false);
+  });
+
+  it("does not keep existing canon entities that have no chapter-local grounding", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Marcus Day",
+            category: "character",
+            summary: "Existing canon character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Mina Essex",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Mina Essex leaned against the doorway and listened for footsteps in the hall.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Mina Essex"),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Marcus Day"),
+    ).toBe(false);
+  });
+
+  it("does not supplement article-free or honorific duplicate names", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "The Warm Hearth",
+            category: "location",
+            summary: "Grounded location.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Mina Essex",
+            category: "character",
+            summary: "Grounded character.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      'The Warm Hearth loomed over the street while Marcus waited outside Warm Hearth until the door opened. "Miss Essex. Mina Essex." Mina Essex looked up from the doorway.',
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Warm Hearth"),
+    ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Miss Essex"),
     ).toBe(false);
   });
 
@@ -1061,17 +2103,175 @@ describe("scan pipeline", () => {
       normalized.entities.some(
         (entity) => entity.name === "Powder" && entity.category === "character",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       normalized.entities.some(
         (entity) => entity.name === "Belt" && entity.category === "character",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       normalized.entities.some(
         (entity) => entity.name === "Fleck" && entity.category === "character",
       ),
+    ).toBe(true);
+  });
+
+  it("reclassifies named horses from publication items back to characters", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Powder",
+            category: "item",
+            itemSubtype: "Publications",
+            summary: "Provider mislabeled Powder as a publication.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Jeanne rode her cremello horse, Powder, to the bell rope.",
+    );
+
+    expect(
+      normalized.entities.some(
+        (entity) =>
+          entity.name === "Powder" &&
+          entity.category === "character" &&
+          entity.itemSubtype === null,
+      ),
+    ).toBe(true);
+  });
+
+  it("classifies animal species or creature kinds as item Animals", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "The hunters tracked Kandar Panthers through the ruins, and later found signs of Kandar Vipers near the well.",
+    );
+
+    expect(
+      normalized.entities.find((entity) => entity.name === "Kandar Panthers")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Kandar Panthers")
+        ?.itemSubtype,
+    ).toBe("Animals");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Kandar Vipers")
+        ?.category,
+    ).toBe("item");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Kandar Vipers")
+        ?.itemSubtype,
+    ).toBe("Animals");
+  });
+
+  it("tracks only invented or fantastical flora and fauna kinds", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Panthers",
+            category: "item",
+            itemSubtype: "Animals",
+            summary: "Generic panthers.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Daisies",
+            category: "item",
+            itemSubtype: "Plants",
+            summary: "Generic daisies.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Blue Daisies",
+            category: "item",
+            itemSubtype: "Plants",
+            summary: "An invented flower variety.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Kandar Panthers",
+            category: "item",
+            itemSubtype: "Animals",
+            summary: "A setting-specific panther kind.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Dragons",
+            category: "item",
+            itemSubtype: "Animals",
+            summary: "Fantastical creatures.",
+            isStub: true,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Panthers prowled in the dark. Daisies nodded in the wind. Blue Daisies bloomed beside the shrine. Kandar Panthers hunted near the ridge. Dragons circled above the valley.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Panthers"),
     ).toBe(false);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Daisies"),
+    ).toBe(false);
+    expect(
+      normalized.entities.find((entity) => entity.name === "Blue Daisies")
+        ?.itemSubtype,
+    ).toBe("Plants");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Kandar Panthers")
+        ?.itemSubtype,
+    ).toBe("Animals");
+    expect(
+      normalized.entities.find((entity) => entity.name === "Dragons")
+        ?.itemSubtype,
+    ).toBe("Animals");
   });
 
   it("drops standalone first-name character pages when a fuller character name already exists", () => {
@@ -1659,7 +2859,7 @@ describe("scan pipeline", () => {
     );
   });
 
-  it("merges The Watch into The City Watch while keeping City Watchmen separate", () => {
+  it("merges The Watch and City Watchmen into The City Watch", () => {
     const chapter = upsertChapter({
       number: 1,
       title: "One",
@@ -1739,10 +2939,279 @@ describe("scan pipeline", () => {
     expect(cityWatch).toBeDefined();
     expect(
       organizations.filter((entity) => entity.slug === "city-watchmen"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(cityWatchAliases.map((row) => row.alias)).toEqual(
-      expect.arrayContaining(["City Watch", "The Watch", "Watch"]),
+      expect.arrayContaining([
+        "City Watch",
+        "City Watchmen",
+        "The Watch",
+        "Watch",
+      ]),
     );
+  });
+
+  it("prefers a full character name over a single-name canon duplicate", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "One",
+      text: "Austin Moon rode with Marcus. Austin laughed.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Austin Moon",
+          category: "character",
+          summary: "A bounty hunter.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Austin Moon"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Austin",
+          category: "character",
+          summary: "Mentioned briefly in the chapter.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: [],
+        articlesUpdated: ["Austin"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const austinMoon = listEntities().find(
+      (entity) => entity.name === "Austin Moon",
+    );
+    const austin = listEntities().find((entity) => entity.name === "Austin");
+    const aliases = getDatabase()
+      .prepare(
+        `SELECT a.alias
+           FROM entity_aliases a
+           JOIN entities e ON e.id = a.entity_id
+          WHERE e.name = ?
+          ORDER BY a.alias`,
+      )
+      .all("Austin Moon") as Array<{ alias: string }>;
+
+    expect(austinMoon).toBeDefined();
+    expect(austin).toBeUndefined();
+    expect(aliases.map((row) => row.alias)).toEqual(
+      expect.arrayContaining(["Austin"]),
+    );
+  });
+
+  it("merges honorific surname variants into fuller character records", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "One",
+      text: "Baron Salem Lighton was famous. Baron Lighton was expected. Gabrielle Kinborough arrived, and Baroness Kinborough was announced.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Salem Lighton",
+          category: "character",
+          summary: "A decorated war hero.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+        {
+          name: "Gabrielle Kinborough",
+          category: "character",
+          summary: "A noblewoman.",
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Salem Lighton", "Gabrielle Kinborough"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Baron Lighton",
+          category: "character",
+          summary: "A shorter title-only reference.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+        {
+          name: "Baroness Kinborough",
+          category: "character",
+          summary: "A title-only reference.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: [],
+        articlesUpdated: ["Baron Lighton", "Baroness Kinborough"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    expect(
+      listEntities().find((entity) => entity.name === "Baron Lighton"),
+    ).toBeUndefined();
+    expect(
+      listEntities().find((entity) => entity.name === "Baroness Kinborough"),
+    ).toBeUndefined();
+    expect(
+      listEntities().find((entity) => entity.name === "Salem Lighton"),
+    ).toBeDefined();
+    expect(
+      listEntities().find((entity) => entity.name === "Gabrielle Kinborough"),
+    ).toBeDefined();
+  });
+
+  it("does not preserve Main on later stub-only character mentions", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "One",
+      text: "Marcus rode Fleck toward town.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Fleck",
+          category: "character",
+          summary: [
+            "## Core Status",
+            "- On-page character",
+            "- Chapter role: Point-of-view character in current chapter snapshot",
+          ].join("\n"),
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["Fleck"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "Fleck",
+          category: "character",
+          summary: "Named in passing as Marcus's horse.",
+          isStub: true,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: [],
+        articlesUpdated: ["Fleck"],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const fleck = listEntities().find((entity) => entity.name === "Fleck");
+    expect(fleck?.subtype).toBeNull();
+  });
+
+  it("merges appositive location aliases into one dossier", () => {
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Calatha",
+            category: "location",
+            summary: "A manor house.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+          {
+            name: "Kinborough Manor",
+            category: "location",
+            summary: "Another name for the same manor.",
+            isStub: false,
+            aliases: [],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      "Small, aesthetically placed groves of fruit trees dotted the rolling hills, and, atop a tall slope with a shallow incline, stood Calatha itself, the Kinborough Manor.",
+    );
+
+    expect(
+      normalized.entities.some((entity) => entity.name === "Calatha"),
+    ).toBe(true);
+    expect(
+      normalized.entities.some((entity) => entity.name === "Kinborough Manor"),
+    ).toBe(false);
+    expect(
+      normalized.entities.find((entity) => entity.name === "Calatha")?.aliases,
+    ).toEqual(expect.arrayContaining(["Kinborough Manor"]));
   });
 
   it("marks later chapters stale during rescan propagation", () => {
@@ -1961,6 +3430,52 @@ describe("scan pipeline", () => {
     expect(isaiah?.subtype).toBe("Main");
   });
 
+  it("does not keep Main on thin unconfirmed POV-only summaries", () => {
+    const chapter = upsertChapter({
+      number: 1,
+      title: "Rumor",
+      text: "Porter said the Shadow King made him do it.",
+    });
+
+    reconcileCanon(chapter.id, {
+      entities: [
+        {
+          name: "The Shadow King",
+          category: "character",
+          summary: [
+            "## Core Status",
+            "- Canon status: Unconfirmed",
+            "- On-page status: Mentioned or on-page in the current chapter snapshot",
+            "- Chapter role: Point-of-view character in current chapter snapshot",
+            "",
+            "## Identity",
+            "- Occupation / function: Missing",
+            "- Affiliation(s): Missing",
+          ].join("\n"),
+          isStub: false,
+          aliases: [],
+          links: [],
+        },
+      ],
+      chronology: [],
+      watchlist: [],
+      summary: {
+        articlesCreated: ["The Shadow King"],
+        articlesUpdated: [],
+        stubsCreated: [],
+        chronologyUpdated: [],
+        continuityUpdated: [],
+        contradictionsFlagged: [],
+      },
+    });
+
+    const shadowKing = listEntities().find(
+      (entity) => entity.name === "The Shadow King",
+    );
+
+    expect(shadowKing?.subtype).toBeNull();
+  });
+
   it("marks primary-character summaries as Main even without the word protagonist", () => {
     const chapter = upsertChapter({
       number: 1,
@@ -2081,6 +3596,168 @@ describe("scan pipeline", () => {
     expect(marcus?.subtype).toBe("Main");
   });
 
+  it("marks opening focal characters as Main even when brief scene-setting comes first", () => {
+    const cases = [
+      {
+        number: 101,
+        title: "Iris POV",
+        name: "Iris Smith",
+        aliases: ["Iris"],
+        text: [
+          "It wasn't sunlight yet, but it was light from the sun.",
+          "Lady Iris Smith's sky-blue eyes fluttered open.",
+          "She yawned and stretched in the massive four-poster bed.",
+          "She sat up and stretched again before she leaned backwards.",
+          "She ran her hands along the fabric with appreciation.",
+          "She put her chocolate-colored hair up with a black ribbon.",
+          "Iris checked the list and smiled.",
+        ].join(" "),
+      },
+      {
+        number: 102,
+        title: "Gabrielle POV",
+        name: "Gabrielle Kinborough",
+        aliases: ["Gabrielle"],
+        text: [
+          "Salt filled the air, and water lapped at the white stone piers.",
+          "Gabrielle Kinborough stood like a pillar atop the stairs leading down to one of the smaller docks.",
+          "Her shining copper hair was immaculately styled and her steel blue eyes scanned the bay.",
+          "Gabrielle's head was locked and immovable, though.",
+          "Her gaze was on a ship that put most others in the harbor to shame.",
+          "Gabrielle took short, measured steps to present herself to her sister.",
+          "She burst into laughter once the carriage door closed.",
+        ].join(" "),
+      },
+      {
+        number: 103,
+        title: "Rob POV",
+        name: "Rob Deacon",
+        aliases: ["Rob"],
+        text: [
+          "THWACK! Another limb down.",
+          "Rob Deacon squinted his brown eyes and peered as far into the gloom as he could.",
+          "He ran his fingers through sweaty, brown hair down over the week of facial hair covering his face.",
+          "He'd been hacking branches for hours.",
+          "Rob wiped his machete on his denim pants and sheathed it for a moment.",
+          "He hoped Olneralta's walls were still intact so he could have one safe night of sleep.",
+          "Rob only had part of a map, but he wasn't dead yet.",
+        ].join(" "),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const chapter = upsertChapter({
+        number: testCase.number,
+        title: testCase.title,
+        text: testCase.text,
+      });
+
+      const normalized = normalizeScanResult(
+        {
+          entities: [
+            {
+              name: testCase.name,
+              category: "character",
+              summary: [
+                "## Core Status",
+                "- On-page character",
+                "",
+                "## Identity",
+                "- Established in current chapter",
+                "",
+                "## Physical Description",
+                "- Present on the page",
+              ].join("\n"),
+              isStub: false,
+              aliases: testCase.aliases,
+              links: [],
+            },
+          ],
+          chronology: [],
+          watchlist: [],
+          summary: {
+            articlesCreated: [testCase.name],
+            articlesUpdated: [],
+            stubsCreated: [],
+            chronologyUpdated: [],
+            continuityUpdated: [],
+            contradictionsFlagged: [],
+          },
+        },
+        testCase.text,
+      );
+
+      const normalizedCharacter = normalized.entities.find(
+        (entity) => entity.name === testCase.name,
+      );
+
+      expect(normalizedCharacter?.summary).toContain(
+        "Point-of-view character in current chapter snapshot",
+      );
+
+      reconcileCanon(chapter.id, normalized);
+
+      const storedCharacter = listEntities().find(
+        (entity) => entity.name === testCase.name,
+      );
+
+      expect(storedCharacter?.subtype).toBe("Main");
+    }
+  });
+
+  it("marks strong POV characters as Main even if the provider flagged the entry as a stub", () => {
+    const chapter = upsertChapter({
+      number: 104,
+      title: "Iris Stub POV",
+      text: [
+        "It wasn't sunlight yet, but it was light from the sun.",
+        "Lady Iris Smith's sky-blue eyes fluttered open.",
+        "She yawned and stretched in the massive four-poster bed.",
+        "She ran her hands along the fabric with appreciation.",
+        "She put her chocolate-colored hair up with a black ribbon.",
+        "Iris checked the list and smiled.",
+      ].join(" "),
+    });
+
+    const normalized = normalizeScanResult(
+      {
+        entities: [
+          {
+            name: "Iris Smith",
+            category: "character",
+            summary: [
+              "## Core Status",
+              "- On-page status: On-page",
+              "- Chapter role: Point-of-view character in current chapter snapshot",
+              "",
+              "## Identity",
+              "- Noblewoman",
+            ].join("\n"),
+            isStub: true,
+            aliases: ["Iris"],
+            links: [],
+          },
+        ],
+        chronology: [],
+        watchlist: [],
+        summary: {
+          articlesCreated: [],
+          articlesUpdated: [],
+          stubsCreated: [],
+          chronologyUpdated: [],
+          continuityUpdated: [],
+          contradictionsFlagged: [],
+        },
+      },
+      chapter.currentText,
+    );
+
+    reconcileCanon(chapter.id, normalized);
+
+    const iris = listEntities().find((entity) => entity.name === "Iris Smith");
+    expect(iris?.subtype).toBe("Main");
+  });
+
   it("promotes concise but descriptive one-sentence dossiers", () => {
     const chapter = upsertChapter({
       number: 1,
@@ -2092,7 +3769,7 @@ describe("scan pipeline", () => {
       entities: [
         {
           name: "Fleck",
-          category: "item",
+          category: "character",
           summary:
             "Marcus Day's faithful speckled gray horse used for traveling long distances.",
           isStub: true,

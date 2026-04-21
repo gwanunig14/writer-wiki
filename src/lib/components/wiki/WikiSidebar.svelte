@@ -35,7 +35,8 @@
   }
 
   ul {
-    padding-left: 1rem;
+    padding-left: 0;
+    margin: 0;
   }
 
   .empty {

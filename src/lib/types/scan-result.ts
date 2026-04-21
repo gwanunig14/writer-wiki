@@ -1,8 +1,22 @@
 import { z } from "zod";
 
+export const itemSubtypeSchema = z.enum([
+  "Weapons",
+  "Documents",
+  "Artifacts",
+  "Clothing",
+  "Events",
+  "Publications",
+  "Vehicles",
+  "Animals",
+  "Plants",
+  "Other",
+]);
+
 export const scanEntitySchema = z.object({
   name: z.string().min(1),
   category: z.enum(["character", "location", "item", "organization"]),
+  itemSubtype: itemSubtypeSchema.optional().nullable(),
   summary: z.string().min(1),
   isStub: z.boolean(),
   aliases: z.array(z.string()).default([]),
