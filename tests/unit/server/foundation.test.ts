@@ -78,13 +78,11 @@ describe("foundation services", () => {
       ["Marcus Day: A bounty hunter with a scar over one eyebrow."],
     );
 
-    expect(prompt).toContain("include concrete physical description details");
-    expect(prompt).toContain("Do not invent physical description details");
-    expect(prompt).toContain(
-      "Each chronology item must represent one distinct event only",
-    );
-    expect(prompt).toContain("Watchlist entries must use only these types");
-    expect(prompt).toContain("Capture every named on-page character");
-    expect(prompt).toContain("Do not substitute one named person for another");
+    expect(prompt).toContain("Treat chapter text as primary authority");
+    expect(prompt).toContain("Preserve contradictions and ambiguity");
+    expect(prompt).toContain("allowed types only");
+    expect(prompt).toContain("Series bible impact");
+    expect(prompt).toContain("File impact");
+    expect(prompt).toContain("Return valid JSON only");
   });
 });

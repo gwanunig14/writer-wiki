@@ -61,7 +61,46 @@ export function startChapterScan(chapterId: string) {
     provider: project.provider,
   });
 
-  const runPromise = runScanJob(job.id).finally(() => {
+  const runPromise = runScanJob(job.id, { userBlocking: true }).finally(() => {
+    runningJobs.delete(job.id);
+  });
+
+  runningJobs.set(job.id, runPromise);
+  return job;
+}
+
+export function startChapterScanWithMode(input: {
+  chapterId: string;
+  userBlocking: boolean;
+}) {
+  const active = getActiveScanJob();
+  if (active) {
+    throw new Error("Another scan is already active.");
+  }
+
+  const project = getProject();
+  if (!project) {
+    throw new Error("Project setup is required before scanning.");
+  }
+
+  const snapshot = createChapterSnapshot(input.chapterId);
+  const job = createScanJob({
+    chapterId: input.chapterId,
+    chapterVersionId: snapshot.id,
+    provider: project.provider,
+  });
+
+  logScanEvent("queued", {
+    scanJobId: job.id,
+    chapterId: input.chapterId,
+    chapterVersionId: snapshot.id,
+    provider: project.provider,
+    userBlocking: input.userBlocking,
+  });
+
+  const runPromise = runScanJob(job.id, {
+    userBlocking: input.userBlocking,
+  }).finally(() => {
     runningJobs.delete(job.id);
   });
 
@@ -74,7 +113,10 @@ export async function waitForScanJob(scanJobId: string) {
   return getScanJob(scanJobId);
 }
 
-async function runScanJob(scanJobId: string) {
+async function runScanJob(
+  scanJobId: string,
+  options: { userBlocking: boolean },
+) {
   const job = getScanJob(scanJobId);
   if (!job) {
     throw new Error("Scan job not found.");
@@ -123,6 +165,10 @@ async function runScanJob(scanJobId: string) {
     logScanEvent("gathered context", {
       scanJobId,
       relatedCanonEntries: scanContext.relatedCanon.length,
+      touchedEntityCount: scanContext.stats.touchedEntityCount,
+      chronologyContextCount: scanContext.stats.chronologyCount,
+      watchlistContextCount: scanContext.stats.watchlistCount,
+      seriesBibleContextCount: scanContext.stats.seriesBibleSectionCount,
     });
     const prompt = buildScanPrompt(chapter, scanContext.relatedCanon);
 
@@ -137,6 +183,8 @@ async function runScanJob(scanJobId: string) {
       chapterText: chapterVersion.text,
       chapterLabel: formatChapterLabel(chapter.number ?? null, chapter.title),
       apiKey,
+      userBlocking: options.userBlocking,
+      escalationHints: scanContext.escalationHints,
     });
     addScanArtifact(scanJobId, "raw-provider-response", rawResult);
     logScanEvent("provider returned result", {

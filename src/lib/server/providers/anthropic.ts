@@ -167,6 +167,51 @@ const SCAN_RESULT_INPUT_SCHEMA = {
         },
       },
     },
+    newCanon: {
+      type: "array",
+      items: { type: "string" },
+    },
+    updatedCanon: {
+      type: "array",
+      items: { type: "string" },
+    },
+    seriesBibleImpact: {
+      type: "object",
+      properties: {
+        outcome: {
+          type: "string",
+          enum: [
+            "no-series-bible-update-needed",
+            "series-bible-update-required",
+            "series-bible-review-required",
+          ],
+        },
+        rationale: { type: "string" },
+        impactedSections: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+    },
+    fileImpact: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["targetPath", "action"],
+        properties: {
+          targetPath: { type: "string" },
+          action: {
+            type: "string",
+            enum: ["create", "update", "move"],
+          },
+          reason: { type: "string" },
+        },
+      },
+    },
+    changeLog: {
+      type: "array",
+      items: { type: "string" },
+    },
     summary: {
       type: "object",
       required: [
@@ -210,6 +255,14 @@ export class AnthropicProvider implements AIProvider {
     chapterText: string;
     chapterLabel: string;
     apiKey: string;
+    userBlocking?: boolean;
+    escalationHints?: {
+      highContradictionDensity: boolean;
+      highEntityAmbiguity: boolean;
+      majorSeriesBibleImpact: boolean;
+      highReconciliationRisk: boolean;
+      validationRetryCount: number;
+    };
   }) {
     if (input.apiKey.startsWith("ack-demo")) {
       return extractDeterministicCanon(input.chapterText, input.chapterLabel);

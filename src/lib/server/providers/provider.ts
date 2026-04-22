@@ -12,6 +12,14 @@ export interface AIProvider {
     chapterText: string;
     chapterLabel: string;
     apiKey: string;
+    userBlocking?: boolean;
+    escalationHints?: {
+      highContradictionDensity: boolean;
+      highEntityAmbiguity: boolean;
+      majorSeriesBibleImpact: boolean;
+      highReconciliationRisk: boolean;
+      validationRetryCount: number;
+    };
   }): Promise<ScanResult>;
   answerCanonQuestion(input: {
     question: string;
@@ -145,6 +153,17 @@ export function extractDeterministicCanon(
       },
     ],
     watchlist: [],
+    newCanon: entities.map((entity) => entity.name),
+    updatedCanon: [],
+    seriesBibleImpact: {
+      outcome: "no-series-bible-update-needed",
+      rationale: "No high-level series-bible deltas were detected.",
+      impactedSections: [],
+    },
+    fileImpact: [],
+    changeLog: [
+      `Scanned ${chapterLabel} with deterministic local fallback mode.`,
+    ],
     summary: {
       articlesCreated: entities.map((entity) => entity.name),
       articlesUpdated: [],

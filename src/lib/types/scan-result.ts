@@ -46,10 +46,37 @@ export const watchlistItemSchema = z.object({
   body: z.string().min(1),
 });
 
+export const seriesBibleImpactSchema = z.object({
+  outcome: z
+    .enum([
+      "no-series-bible-update-needed",
+      "series-bible-update-required",
+      "series-bible-review-required",
+    ])
+    .default("no-series-bible-update-needed"),
+  rationale: z.string().default(""),
+  impactedSections: z.array(z.string()).default([]),
+});
+
+export const fileImpactItemSchema = z.object({
+  targetPath: z.string().min(1),
+  action: z.enum(["create", "update", "move"]).default("update"),
+  reason: z.string().default(""),
+});
+
 export const scanResultSchema = z.object({
   entities: z.array(scanEntitySchema).default([]),
   chronology: z.array(chronologyItemSchema).default([]),
   watchlist: z.array(watchlistItemSchema).default([]),
+  newCanon: z.array(z.string()).default([]),
+  updatedCanon: z.array(z.string()).default([]),
+  seriesBibleImpact: seriesBibleImpactSchema.default({
+    outcome: "no-series-bible-update-needed",
+    rationale: "",
+    impactedSections: [],
+  }),
+  fileImpact: z.array(fileImpactItemSchema).default([]),
+  changeLog: z.array(z.string()).default([]),
   summary: z.object({
     articlesCreated: z.array(z.string()).default([]),
     articlesUpdated: z.array(z.string()).default([]),

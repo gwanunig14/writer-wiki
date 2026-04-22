@@ -4,10 +4,14 @@ import {
   getChapter,
   upsertChapter,
 } from "$lib/server/db/repositories/chapter-repository";
-import { startChapterScan } from "$lib/server/scan/scan-orchestrator";
+import {
+  startChapterScan,
+  startChapterScanWithMode,
+} from "$lib/server/scan/scan-orchestrator";
 
 const requestSchema = z.object({
   forceRescan: z.boolean().optional().default(false),
+  userBlocking: z.boolean().optional().default(true),
   number: z.number().int().nullable().optional(),
   title: z.string().min(1).optional(),
   text: z.string().optional(),
@@ -35,7 +39,12 @@ export async function POST({ params, request }) {
 
   let scanJob;
   try {
-    scanJob = startChapterScan(params.id);
+    scanJob = payload.userBlocking
+      ? startChapterScan(params.id)
+      : startChapterScanWithMode({
+          chapterId: params.id,
+          userBlocking: false,
+        });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Scan failed.";
     throw error(400, message);
