@@ -1,6 +1,7 @@
 import { getDatabase, makeId, nowIso } from "$lib/server/db/client";
 import { makeSlug } from "$lib/server/providers/provider";
 import type { ScanResult } from "$lib/types/scan-result";
+import { inferEntitySubtype } from "./normalize-entity-subtype";
 import { replaceChapterDependencies } from "./rescan-propagation";
 
 const categoryLabels = {
@@ -394,73 +395,7 @@ function stripUnsupportedPointOfViewLines(summary: string) {
     .trim();
 }
 
-function inferEntitySubtype(entity: ScanResult["entities"][number]) {
-  if (entity.category === "item") {
-    return entity.itemSubtype ?? null;
-  }
-
-  if (entity.category !== "character") {
-    return null;
-  }
-
-  // Structured model output wins.
-  // This is the important new part.
-  if (entity.characterImportance === "main") {
-    return "Main";
-  }
-
-  if (entity.characterImportance === "major") {
-    return "Major";
-  }
-
-  if (entity.characterImportance === "minor") {
-    return "Minor";
-  }
-
-  // Fallback for older scan results that do not have characterImportance yet.
-  const text = `${entity.name} ${entity.summary}`.toLowerCase();
-
-  const hasExplicitMainCue =
-    /\b(?:protagonist|main character|lead character|primary character|on-page primary character)\b/.test(
-      text,
-    );
-
-  const hasPovCue = /\b(?:primary pov|point-of-view|point of view|pov)\b/.test(
-    text,
-  );
-
-  const hasMajorCue =
-    /\b(?:major character|important recurring|recurring character|supporting character|politically significant|plot-significant|substantial scene presence|central supporting)\b/.test(
-      text,
-    );
-
-  const appearsNonHuman =
-    /\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/.test(
-      text,
-    );
-
-  const hasSubstantiveEvidence =
-    !entity.isStub ||
-    normalizeEntityEvidence(entity.summary, entity.isStub).isStub === false;
-
-  const hasUnsupportedThinPovSummary = hasUnsupportedPovOnlySummary(
-    entity.summary,
-  );
-
-  if (
-    hasSubstantiveEvidence &&
-    !appearsNonHuman &&
-    (hasExplicitMainCue || (hasPovCue && !hasUnsupportedThinPovSummary))
-  ) {
-    return "Main";
-  }
-
-  if (hasSubstantiveEvidence && !appearsNonHuman && hasMajorCue) {
-    return "Major";
-  }
-
-  return null;
-}
+// Now imported from normalize-entity-subtype.ts
 
 function buildWatchOrganizationAliases(name: string) {
   const normalizedName = normalizeAliasValue(name);

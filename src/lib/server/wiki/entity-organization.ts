@@ -64,10 +64,17 @@ function inferCharacterSegments(
   entity: EntitySummaryRecord,
   chapterAppearanceCount = 0,
 ) {
+  // Prefer characterImportance if present
+  if (entity.characterImportance === "main") return ["Main"];
+  if (entity.characterImportance === "major") return ["Major"];
+  if (entity.characterImportance === "minor") return ["Minor"];
+
+  // Fallback to subtype path if present
   if (parseSubtypePath(entity.subtype).length > 0) {
     return parseSubtypePath(entity.subtype);
   }
 
+  // Fallback to chapter appearance count
   if (chapterAppearanceCount >= 2) {
     return ["Major"];
   }

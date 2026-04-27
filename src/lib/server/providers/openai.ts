@@ -117,6 +117,7 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// OpenAI scan response schema: ensure all new fields are present and required for character entities
 const SCAN_RESPONSE_JSON_SCHEMA = {
   type: "object",
   required: [
@@ -143,11 +144,9 @@ const SCAN_RESPONSE_JSON_SCHEMA = {
           "isStub",
           "aliases",
           "links",
+          // New required fields for all entities (character: always present, others: null/empty)
           "characterImportance",
-          "roleTitleFacts",
-          "physicalDescription",
-          "relationshipFacts",
-          "outfitByScene",
+          "facts",
         ],
         properties: {
           name: {
@@ -210,30 +209,52 @@ const SCAN_RESPONSE_JSON_SCHEMA = {
           characterImportance: {
             type: ["string", "null"],
             enum: ["main", "major", "minor", null],
+            description:
+              "main = protagonist/POV/central, major = important recurring/supporting, minor = brief/mentioned/background. Must be set for all characters. Null for non-characters.",
           },
-          roleTitleFacts: {
+          facts: {
             type: "array",
             items: {
-              type: "string",
+              type: "object",
+              required: [
+                "entityName",
+                "entityCategory",
+                "field",
+                "value",
+                "evidence",
+                "confidence",
+                "persistence",
+                "sceneLabel",
+                "sourceChapterNumber",
+              ],
+              properties: {
+                entityName: { type: "string", minLength: 1 },
+                entityCategory: {
+                  type: "string",
+                  enum: ["character", "location", "item", "organization"],
+                },
+                field: { type: "string", minLength: 1 },
+                value: { type: "string", minLength: 1 },
+                evidence: { type: "string", minLength: 1 },
+                confidence: {
+                  type: "string",
+                  enum: ["confirmed", "probable", "possible"],
+                  default: "confirmed",
+                },
+                persistence: {
+                  type: "string",
+                  enum: ["stable", "scene-specific", "temporary", "unknown"],
+                  default: "unknown",
+                },
+                sceneLabel: { type: ["string", "null"], default: null },
+                sourceChapterNumber: {
+                  type: ["number", "null"],
+                  default: null,
+                },
+              },
+              additionalProperties: false,
             },
-          },
-          physicalDescription: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          relationshipFacts: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          outfitByScene: {
-            type: "array",
-            items: {
-              type: "string",
-            },
+            description: "Atomic canon facts for the entity. Always present.",
           },
         },
         additionalProperties: false,
@@ -379,6 +400,75 @@ class ScanSchemaValidationError extends Error {
 function parseScanResultFromOutputText(outputText: string) {
   try {
     const parsedJson = parseJsonResponseText(outputText);
+    // Migrate legacy arrays to facts if present
+    if (parsedJson && Array.isArray(parsedJson.entities)) {
+      for (const entity of parsedJson.entities) {
+        if (!Array.isArray(entity.facts)) {
+          entity.facts = [];
+        }
+        // Migrate legacy arrays if present
+        if (Array.isArray(entity.roleTitleFacts)) {
+          for (const value of entity.roleTitleFacts) {
+            entity.facts.push({
+              entityName: entity.name,
+              entityCategory: entity.category,
+              field: "role.title",
+              value,
+              evidence: entity.summary || "", // fallback
+              confidence: "confirmed",
+              persistence: "stable",
+              sceneLabel: null,
+              sourceChapterNumber: null,
+            });
+          }
+        }
+        if (Array.isArray(entity.physicalDescription)) {
+          for (const value of entity.physicalDescription) {
+            entity.facts.push({
+              entityName: entity.name,
+              entityCategory: entity.category,
+              field: "appearance.general",
+              value,
+              evidence: entity.summary || "",
+              confidence: "confirmed",
+              persistence: "stable",
+              sceneLabel: null,
+              sourceChapterNumber: null,
+            });
+          }
+        }
+        if (Array.isArray(entity.relationshipFacts)) {
+          for (const value of entity.relationshipFacts) {
+            entity.facts.push({
+              entityName: entity.name,
+              entityCategory: entity.category,
+              field: "relationship.general",
+              value,
+              evidence: entity.summary || "",
+              confidence: "confirmed",
+              persistence: "stable",
+              sceneLabel: null,
+              sourceChapterNumber: null,
+            });
+          }
+        }
+        if (Array.isArray(entity.outfitByScene)) {
+          for (const value of entity.outfitByScene) {
+            entity.facts.push({
+              entityName: entity.name,
+              entityCategory: entity.category,
+              field: "appearance.clothing",
+              value,
+              evidence: entity.summary || "",
+              confidence: "confirmed",
+              persistence: "scene-specific",
+              sceneLabel: null,
+              sourceChapterNumber: null,
+            });
+          }
+        }
+      }
+    }
     return scanResultSchema.parse(parsedJson);
   } catch (error) {
     throw new ScanSchemaValidationError(

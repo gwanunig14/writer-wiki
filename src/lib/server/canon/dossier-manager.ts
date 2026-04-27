@@ -1,3 +1,68 @@
+import type { ScanEntity, ExtractedFact } from "$lib/types/scan-result";
+
+export function buildCharacterArticleBody(entity: ScanEntity): string {
+  const lines: string[] = [];
+  // Overview summary
+  if (entity.summary && entity.summary.trim()) {
+    lines.push(entity.summary.trim(), "");
+  }
+
+  // Helper to group facts by field prefix
+  function groupFacts(prefix: string): ExtractedFact[] {
+    return (entity.facts || []).filter((f) => f.field.startsWith(prefix));
+  }
+
+  // Role / Titles
+  lines.push("## Role / Titles");
+  const roleFacts = groupFacts("role.");
+  if (roleFacts.length > 0) {
+    for (const fact of roleFacts) {
+      lines.push(`- ${fact.value}`);
+    }
+  } else {
+    lines.push("- Missing / unestablished");
+  }
+  lines.push("");
+
+  // Physical Description
+  lines.push("## Physical Description");
+  const appearanceFacts = groupFacts("appearance.");
+  if (appearanceFacts.length > 0) {
+    for (const fact of appearanceFacts) {
+      lines.push(`- ${fact.value}`);
+    }
+  } else {
+    lines.push("- Missing / unestablished");
+  }
+  lines.push("");
+
+  // Relationships
+  lines.push("## Relationships");
+  const relationshipFacts = groupFacts("relationship.");
+  if (relationshipFacts.length > 0) {
+    for (const fact of relationshipFacts) {
+      lines.push(`- ${fact.value}`);
+    }
+  } else {
+    lines.push("- Missing / unestablished");
+  }
+  lines.push("");
+
+  // Outfit / Appearance by Scene
+  lines.push("## Outfit / Appearance by Scene");
+  const outfitFacts = groupFacts("appearance.clothing").concat(
+    groupFacts("appearance.outfit"),
+  );
+  if (outfitFacts.length > 0) {
+    for (const fact of outfitFacts) {
+      lines.push(`- ${fact.value}`);
+    }
+  } else {
+    lines.push("- Missing / unestablished");
+  }
+
+  return lines.join("\n").trim();
+}
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { getDatabase, makeId, nowIso } from "$lib/server/db/client";
@@ -349,12 +414,46 @@ export function updateDossierBySlug(input: {
     category: input.category,
     parentLocationName: input.parentLocationName,
   });
+
+  // If character, build articleBody from structured fields
+  let articleBody = input.articleBody;
+  if (input.category === "character") {
+    // Try to parse input.articleBody as JSON ScanEntity, else fallback to input fields
+    let entity: ScanEntity | null = null;
+    try {
+      entity =
+        typeof input.articleBody === "string" &&
+        input.articleBody.trim().startsWith("{")
+          ? JSON.parse(input.articleBody)
+          : null;
+    } catch {}
+    if (!entity) {
+      // Fallback: build from input fields if available
+      entity = {
+        name: input.name,
+        category: "character",
+        summary: input.articleBody,
+        isStub: false,
+        aliases: [],
+        links: [],
+        characterImportance: null,
+        roleTitleFacts: (input as any).roleTitleFacts ?? [],
+        physicalDescription: (input as any).physicalDescription ?? [],
+        relationshipFacts: (input as any).relationshipFacts ?? [],
+        outfitByScene: (input as any).outfitByScene ?? [],
+        itemSubtype: null,
+        parentLocationName: null,
+      };
+    }
+    articleBody = buildCharacterArticleBody(entity);
+  }
+
   const decision = buildDecisionFromEntity({
     existingName,
     existingAliases,
     name: input.name,
     category: input.category,
-    articleBody: input.articleBody,
+    articleBody,
     suppress: Boolean(input.suppress),
     notes: input.notes,
   });
@@ -383,7 +482,7 @@ export function updateDossierBySlug(input: {
       input.category,
       folderPath || null,
       parentEntityId,
-      input.articleBody.trim(),
+      articleBody.trim(),
       nowIso(),
       entityId,
     );

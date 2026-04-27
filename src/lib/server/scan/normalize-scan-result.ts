@@ -2,6 +2,7 @@ import { getDatabase } from "$lib/server/db/client";
 import { applyUserCanonDecisionToEntity } from "$lib/server/canon/user-canon-decisions";
 import { makeSlug } from "$lib/server/providers/provider";
 import { scanResultSchema, type ScanResult } from "$lib/types/scan-result";
+import { inferEntitySubtype } from "./normalize-entity-subtype";
 import nlp from "compromise";
 
 type SupportedCategory = ScanResult["entities"][number]["category"];
@@ -3028,6 +3029,8 @@ function normalizeProviderEntity(
         ? entity.itemSubtype
         : (inferredItemSubtype ?? entity.itemSubtype)
       : null;
+  // Structured subtype inference for all entities
+  const inferredSubtype = inferEntitySubtype(entity);
   const normalizedEntity =
     normalizedName === entity.name &&
     normalizedSummary === entity.summary &&
@@ -3035,7 +3038,7 @@ function normalizeProviderEntity(
     JSON.stringify(
       normalizeEntityAliases(entity.aliases, normalizedName, entity.category),
     ) === JSON.stringify(entity.aliases)
-      ? entity
+      ? { ...entity, subtype: inferredSubtype ?? null }
       : {
           ...entity,
           name: normalizedName,
@@ -3046,6 +3049,7 @@ function normalizeProviderEntity(
             entity.category,
           ),
           itemSubtype: normalizedItemSubtype,
+          subtype: inferredSubtype ?? null,
         };
 
   const match = findFirstNameMatch(normalizedEntity.name, chapterText);
@@ -3949,6 +3953,11 @@ function collectSupplementalEntities(
           isStub: true,
           aliases: [],
           links: [],
+          characterImportance: null,
+          roleTitleFacts: [],
+          physicalDescription: [],
+          relationshipFacts: [],
+          outfitByScene: [],
         },
         [...existingEntities, ...Array.from(found.values())],
         existingEntitySlugs,
@@ -3961,6 +3970,11 @@ function collectSupplementalEntities(
           isStub: true,
           aliases: [],
           links: [],
+          characterImportance: null,
+          roleTitleFacts: [],
+          physicalDescription: [],
+          relationshipFacts: [],
+          outfitByScene: [],
         },
         [...existingEntities, ...Array.from(found.values())],
       ) ||
@@ -3972,6 +3986,11 @@ function collectSupplementalEntities(
           isStub: true,
           aliases: [],
           links: [],
+          characterImportance: null,
+          roleTitleFacts: [],
+          physicalDescription: [],
+          relationshipFacts: [],
+          outfitByScene: [],
         },
         [...existingEntities, ...Array.from(found.values())],
       ) ||
@@ -4007,6 +4026,11 @@ function collectSupplementalEntities(
       isStub: true,
       aliases: [],
       links: [],
+      characterImportance: null,
+      roleTitleFacts: [],
+      physicalDescription: [],
+      relationshipFacts: [],
+      outfitByScene: [],
     };
 
     const entity = applyUserCanonDecisionToEntity(supplementalCandidate);

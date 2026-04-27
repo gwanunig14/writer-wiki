@@ -13,12 +13,83 @@ export const itemSubtypeSchema = z.enum([
   "Other",
 ]);
 
+// Fact confidence and persistence enums
+export const factConfidenceSchema = z.enum([
+  "confirmed",
+  "probable",
+  "possible",
+]);
+
+export const factPersistenceSchema = z.enum([
+  "stable",
+  "scene-specific",
+  "temporary",
+  "unknown",
+]);
+
+export const factFieldSchema = z.enum([
+  "role.title",
+  "role.status",
+  "role.function",
+
+  "appearance.age",
+  "appearance.height",
+  "appearance.build",
+  "appearance.hairColor",
+  "appearance.hairStyle",
+  "appearance.eyeColor",
+  "appearance.face",
+  "appearance.scars",
+  "appearance.clothing",
+  "appearance.accessories",
+  "appearance.general",
+
+  "relationship.family",
+  "relationship.employment",
+  "relationship.alliance",
+  "relationship.ownership",
+  "relationship.rivalry",
+
+  "location.parent",
+  "location.type",
+  "location.description",
+  "location.feature",
+
+  "item.subtype",
+  "item.owner",
+  "item.description",
+
+  "organization.member",
+  "organization.leader",
+  "organization.type",
+
+  "event.participant",
+  "event.location",
+  "event.consequence",
+
+  "other",
+]);
+
+export const extractedFactSchema = z.object({
+  entityName: z.string().min(1),
+  entityCategory: z.enum(["character", "location", "item", "organization"]),
+  field: factFieldSchema,
+  value: z.string().min(1),
+  evidence: z.string().min(1),
+  confidence: factConfidenceSchema.default("confirmed"),
+  persistence: factPersistenceSchema.default("unknown"),
+  sceneLabel: z.string().nullable().default(null),
+  sourceChapterId: z.string().nullable().default(null),
+  sourceChapterNumber: z.number().nullable().default(null),
+});
+
+// Entity-level fields and facts
 export const scanEntitySchema = z.object({
   name: z.string().min(1),
   category: z.enum(["character", "location", "item", "organization"]),
   itemSubtype: itemSubtypeSchema.optional().nullable(),
   parentLocationName: z.string().optional().nullable(),
-  summary: z.string().min(1),
+  summary: z.string().optional().default(""),
   isStub: z.boolean(),
   aliases: z.array(z.string()).default([]),
   links: z
@@ -28,10 +99,7 @@ export const scanEntitySchema = z.object({
     .enum(["main", "major", "minor"])
     .nullable()
     .default(null),
-  roleTitleFacts: z.array(z.string()).default([]),
-  physicalDescription: z.array(z.string()).default([]),
-  relationshipFacts: z.array(z.string()).default([]),
-  outfitByScene: z.array(z.string()).default([]),
+  facts: z.array(extractedFactSchema).default([]),
 });
 
 export const chronologyItemSchema = z.object({
@@ -96,6 +164,10 @@ export const scanSummarySchema = z.object({
   contradictionsFlagged: z.array(z.string()).default([]),
 });
 
-export type ScanResult = z.infer<typeof scanResultSchema>;
+export type FactConfidence = z.infer<typeof factConfidenceSchema>;
+export type FactPersistence = z.infer<typeof factPersistenceSchema>;
+export type ExtractedFact = z.infer<typeof extractedFactSchema>;
 export type ScanEntity = z.infer<typeof scanEntitySchema>;
+export type ScanResult = z.infer<typeof scanResultSchema>;
 export type ScanSummary = z.infer<typeof scanSummarySchema>;
+export type FactField = z.infer<typeof factFieldSchema>;
