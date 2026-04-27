@@ -160,7 +160,7 @@ Research findings are captured in [research.md](./research.md). The main impleme
 
 - Expose a common `AIProvider` interface with operations for `testConnection`, `scanChapter`, and `answerCanonQuestion`.
 - Support OpenAI and Anthropic implementations behind the same normalized result schema.
-- Keep prompt assets in the local project system folder and assemble prompts on the server from constitution, templates, current chapter snapshot, related canon, watchlist, chronology, and dependency context.
+- Keep prompt assets in the local project system folder and assemble prompts on the server from constitution, templates, current chapter snapshot, related canon, watchlist, chronology, and dependency context. Context assembly must enforce a token budget per tier: chapter snapshot delta first, then a ranked cap of related canon articles, then chronology and watchlist entries only if directly relevant.
 - Treat malformed or partially valid structured output as recoverable through normalization and explicit scan failure states rather than partial silent writes.
 
 ### Canon Generation And Rescan Propagation
@@ -178,7 +178,7 @@ Research findings are captured in [research.md](./research.md). The main impleme
 
 ## Risks And Mitigations
 
-- Risk: Large prompt payloads slow scans. Mitigation: Prefer larger contextual payloads but stage context gathering and show explicit progress messaging.
+- Risk: Prompt payloads grow unbounded as project scales. Mitigation: Context assembly must select only the current chapter snapshot delta, directly referenced canon entities (not all entities), and a capped excerpt budget per retrieval tier. Full-corpus stuffing is explicitly disallowed.
 - Risk: File mirror drift after partial failures. Mitigation: Persist sync state, log file-write jobs, and provide deterministic regeneration.
 - Risk: Entity over-merging or incorrect stub promotion. Mitigation: Use conservative matching thresholds and watchlist escalation for ambiguous identity merges.
 - Risk: Local secrets leakage in export bundles. Mitigation: Exclude provider credentials from export by default and keep secret storage separate from exported project data.

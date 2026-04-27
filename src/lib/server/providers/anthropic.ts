@@ -82,7 +82,16 @@ async function resolveLatestAvailableAnthropicModel(client: Anthropic) {
 // input_schema to force structured output via tool-use.
 const SCAN_RESULT_INPUT_SCHEMA = {
   type: "object" as const,
-  required: ["entities", "chronology", "watchlist", "summary"],
+  required: [
+    "entities",
+    "chronology",
+    "watchlist",
+    "newCanon",
+    "updatedCanon",
+    "seriesBibleImpact",
+    "fileImpact",
+    "changeLog",
+  ],
   properties: {
     entities: {
       type: "array",
@@ -212,25 +221,6 @@ const SCAN_RESULT_INPUT_SCHEMA = {
       type: "array",
       items: { type: "string" },
     },
-    summary: {
-      type: "object",
-      required: [
-        "articlesCreated",
-        "articlesUpdated",
-        "stubsCreated",
-        "chronologyUpdated",
-        "continuityUpdated",
-        "contradictionsFlagged",
-      ],
-      properties: {
-        articlesCreated: { type: "array", items: { type: "string" } },
-        articlesUpdated: { type: "array", items: { type: "string" } },
-        stubsCreated: { type: "array", items: { type: "string" } },
-        chronologyUpdated: { type: "array", items: { type: "string" } },
-        continuityUpdated: { type: "array", items: { type: "string" } },
-        contradictionsFlagged: { type: "array", items: { type: "string" } },
-      },
-    },
   },
 };
 
@@ -251,16 +241,48 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async scanChapter(input: {
-    prompt: string;
+    systemPrompt: string;
+    requestInput: Array<{
+      role: "system" | "user";
+      content: Array<{
+        type: "input_text";
+        text: string;
+      }>;
+    }>;
+    requestPayload: {
+      chapter: {
+        number: number | null;
+        title: string;
+        text: string;
+      };
+      comparisonPacket: {
+        entities: Array<{
+          canonicalName: string;
+          category: "character" | "location" | "item" | "organization";
+          aliases: string[];
+          stableFacts: string[];
+          openRisks: string[];
+        }>;
+        chronologyComparisonFacts: string[];
+        watchlistNotes: string[];
+      };
+    };
     chapterText: string;
     chapterLabel: string;
     apiKey: string;
     userBlocking?: boolean;
+    onBatchLifecycleEvent?: (event: {
+      phase: "submitted" | "polling" | "completed";
+      batchId: string;
+      batchCustomId: string;
+      batchInputFileId?: string;
+      batchStatus?: string;
+    }) => void;
     escalationHints?: {
-      highContradictionDensity: boolean;
-      highEntityAmbiguity: boolean;
+      contradictionCountExceededThreshold: boolean;
+      unresolvedAmbiguityExceededThreshold: boolean;
       majorSeriesBibleImpact: boolean;
-      highReconciliationRisk: boolean;
+      lowReconciliationConfidence: boolean;
       validationRetryCount: number;
     };
   }) {
@@ -294,9 +316,13 @@ export class AnthropicProvider implements AIProvider {
       try {
         console.info("[scan:anthropic] sending scan request", {
           model,
-          promptLength: input.prompt.length,
+          promptLength: JSON.stringify(input.requestPayload).length,
           chapterLength: input.chapterText.length,
         });
+
+        const prompt = input.requestInput
+          .flatMap((message) => message.content.map((entry) => entry.text))
+          .join("\n\n");
 
         response = await client.messages.create({
           model,
@@ -310,7 +336,7 @@ export class AnthropicProvider implements AIProvider {
             },
           ],
           tool_choice: { type: "tool", name: "produce_scan_result" },
-          messages: [{ role: "user", content: input.prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
         selectedModel = model;
         break;

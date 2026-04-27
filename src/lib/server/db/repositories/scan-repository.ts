@@ -12,6 +12,9 @@ function mapScanJob(row: Record<string, unknown>) {
     completedAt: (row.completed_at as string | null) ?? null,
     summaryJson: (row.summary_json as string | null) ?? null,
     errorMessage: (row.error_message as string | null) ?? null,
+    batchId: (row.batch_id as string | null) ?? null,
+    batchCustomId: (row.batch_custom_id as string | null) ?? null,
+    batchInputFileId: (row.batch_input_file_id as string | null) ?? null,
     createdAt: String(row.created_at),
   };
 }
@@ -86,4 +89,24 @@ export function addScanArtifact(
       "INSERT INTO scan_result_artifacts (id, scan_job_id, artifact_type, payload, created_at) VALUES (?, ?, ?, ?, ?)",
     )
     .run(makeId(), scanJobId, artifactType, JSON.stringify(payload), nowIso());
+}
+
+export function setScanJobBatchMetadata(input: {
+  scanJobId: string;
+  batchId: string;
+  batchCustomId: string;
+  batchInputFileId: string;
+}) {
+  getDatabase()
+    .prepare(
+      "UPDATE scan_jobs SET batch_id = ?, batch_custom_id = ?, batch_input_file_id = ? WHERE id = ?",
+    )
+    .run(
+      input.batchId,
+      input.batchCustomId,
+      input.batchInputFileId,
+      input.scanJobId,
+    );
+
+  return getScanJob(input.scanJobId);
 }

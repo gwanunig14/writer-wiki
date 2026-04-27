@@ -1,14 +1,14 @@
 import { getDatabase } from "$lib/server/db/client";
 import type { RetrievedCanonContext, RetrievalEvidence } from "./query-context";
 
-function tokenize(question: string) {
+export function tokenize(question: string) {
   return question
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 3);
 }
 
-function scoreMatch(text: string, tokens: string[]) {
+export function scoreMatch(text: string, tokens: string[]) {
   const normalized = text.toLowerCase();
   return tokens.reduce(
     (score, token) => score + (normalized.includes(token) ? 1 : 0),

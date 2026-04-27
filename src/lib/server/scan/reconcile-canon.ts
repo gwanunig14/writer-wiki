@@ -403,21 +403,46 @@ function inferEntitySubtype(entity: ScanResult["entities"][number]) {
     return null;
   }
 
+  // Structured model output wins.
+  // This is the important new part.
+  if (entity.characterImportance === "main") {
+    return "Main";
+  }
+
+  if (entity.characterImportance === "major") {
+    return "Major";
+  }
+
+  if (entity.characterImportance === "minor") {
+    return "Minor";
+  }
+
+  // Fallback for older scan results that do not have characterImportance yet.
   const text = `${entity.name} ${entity.summary}`.toLowerCase();
-  const hasExplicitPrimaryCue =
+
+  const hasExplicitMainCue =
     /\b(?:protagonist|main character|lead character|primary character|on-page primary character)\b/.test(
       text,
     );
+
   const hasPovCue = /\b(?:primary pov|point-of-view|point of view|pov)\b/.test(
     text,
   );
+
+  const hasMajorCue =
+    /\b(?:major character|important recurring|recurring character|supporting character|politically significant|plot-significant|substantial scene presence|central supporting)\b/.test(
+      text,
+    );
+
   const appearsNonHuman =
     /\b(?:animal|horse|mare|stallion|mount|steed|hound|dog|cat|wolf|bird)\b/.test(
       text,
     );
+
   const hasSubstantiveEvidence =
     !entity.isStub ||
     normalizeEntityEvidence(entity.summary, entity.isStub).isStub === false;
+
   const hasUnsupportedThinPovSummary = hasUnsupportedPovOnlySummary(
     entity.summary,
   );
@@ -425,9 +450,13 @@ function inferEntitySubtype(entity: ScanResult["entities"][number]) {
   if (
     hasSubstantiveEvidence &&
     !appearsNonHuman &&
-    (hasExplicitPrimaryCue || (hasPovCue && !hasUnsupportedThinPovSummary))
+    (hasExplicitMainCue || (hasPovCue && !hasUnsupportedThinPovSummary))
   ) {
     return "Main";
+  }
+
+  if (hasSubstantiveEvidence && !appearsNonHuman && hasMajorCue) {
+    return "Major";
   }
 
   return null;
@@ -1547,6 +1576,5 @@ export function reconcileCanon(chapterId: string, result: ScanResult) {
 
   return {
     entityOutcomes,
-    summary: result.summary,
   };
 }

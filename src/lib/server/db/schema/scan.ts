@@ -22,6 +22,9 @@ export const scanJobs = sqliteTable("scan_jobs", {
   completedAt: text("completed_at"),
   summaryJson: text("summary_json"),
   errorMessage: text("error_message"),
+  batchId: text("batch_id"),
+  batchCustomId: text("batch_custom_id"),
+  batchInputFileId: text("batch_input_file_id"),
   createdAt: text("created_at").notNull(),
 });
 

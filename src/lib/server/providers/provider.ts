@@ -1,23 +1,38 @@
 import { createHash } from "node:crypto";
 import type { ProviderName } from "$lib/types/domain";
 import type { ScanResult } from "$lib/types/scan-result";
+import type {
+  ChapterScanInputMessage,
+  ChapterScanPayload,
+} from "$lib/server/prompts/scan-prompt";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAIProvider } from "./openai";
+
+export interface ScanBatchLifecycleEvent {
+  phase: "submitted" | "polling" | "completed";
+  batchId: string;
+  batchCustomId: string;
+  batchInputFileId?: string;
+  batchStatus?: string;
+}
 
 export interface AIProvider {
   readonly name: ProviderName;
   testConnection(apiKey: string): Promise<{ ok: boolean; message: string }>;
   scanChapter(input: {
-    prompt: string;
+    systemPrompt: string;
+    requestInput: ChapterScanInputMessage[];
+    requestPayload: ChapterScanPayload;
     chapterText: string;
     chapterLabel: string;
     apiKey: string;
     userBlocking?: boolean;
+    onBatchLifecycleEvent?: (event: ScanBatchLifecycleEvent) => void;
     escalationHints?: {
-      highContradictionDensity: boolean;
-      highEntityAmbiguity: boolean;
+      contradictionCountExceededThreshold: boolean;
+      unresolvedAmbiguityExceededThreshold: boolean;
       majorSeriesBibleImpact: boolean;
-      highReconciliationRisk: boolean;
+      lowReconciliationConfidence: boolean;
       validationRetryCount: number;
     };
   }): Promise<ScanResult>;
@@ -164,13 +179,5 @@ export function extractDeterministicCanon(
     changeLog: [
       `Scanned ${chapterLabel} with deterministic local fallback mode.`,
     ],
-    summary: {
-      articlesCreated: entities.map((entity) => entity.name),
-      articlesUpdated: [],
-      stubsCreated: entities.map((entity) => entity.name),
-      chronologyUpdated: [`${chapterLabel} snapshot ${digest}`],
-      continuityUpdated: [],
-      contradictionsFlagged: [],
-    },
   };
 }

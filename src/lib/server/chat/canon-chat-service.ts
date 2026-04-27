@@ -1,4 +1,3 @@
-import { buildChatPrompt } from "$lib/server/prompts/chat-prompt";
 import { applyChatCanonAction } from "$lib/server/canon/dossier-manager";
 import { getProject } from "$lib/server/db/repositories/project-repository";
 import {
@@ -18,7 +17,7 @@ const refusalPattern =
 const confirmationPattern = /^(confirm|yes|apply|do it|proceed)$/i;
 const cancelPattern = /^(cancel|no|stop|never mind)$/i;
 
-interface PendingCanonAction {
+export interface PendingCanonAction {
   type: "suppress-dossier" | "reclassify-dossier" | "merge-dossier";
   name: string;
   category?: EntityCategory;
@@ -108,12 +107,19 @@ export async function answerCanonQuestion(input: {
   conversationId?: string | null;
 }) {
   const conversationId = ensureConversation(input.conversationId);
-  appendChatMessage({ conversationId, role: "user", message: input.question });
+  const trimmedQuestion = input.question.trim();
+
+  appendChatMessage({
+    conversationId,
+    role: "user",
+    message: trimmedQuestion,
+  });
 
   const pendingAction = getPendingCanonAction(
     conversationId,
   ) as PendingCanonAction | null;
-  if (pendingAction && confirmationPattern.test(input.question.trim())) {
+
+  if (pendingAction && confirmationPattern.test(trimmedQuestion)) {
     const direct = applyChatCanonAction(pendingAction);
     setPendingCanonAction(conversationId, null);
     appendChatMessage({
@@ -135,7 +141,7 @@ export async function answerCanonQuestion(input: {
     };
   }
 
-  if (pendingAction && cancelPattern.test(input.question.trim())) {
+  if (pendingAction && cancelPattern.test(trimmedQuestion)) {
     const direct = `Canceled the pending request to ${describeCanonAction(pendingAction)}.`;
     setPendingCanonAction(conversationId, null);
     appendChatMessage({
@@ -157,7 +163,7 @@ export async function answerCanonQuestion(input: {
     };
   }
 
-  const requestedAction = parseCanonAction(input.question.trim());
+  const requestedAction = parseCanonAction(trimmedQuestion);
   if (requestedAction) {
     setPendingCanonAction(conversationId, requestedAction);
     const direct = `I can ${describeCanonAction(requestedAction)}. Reply with confirm to apply it locally, or cancel to leave canon unchanged.`;
@@ -180,7 +186,7 @@ export async function answerCanonQuestion(input: {
     };
   }
 
-  if (refusalPattern.test(input.question)) {
+  if (refusalPattern.test(trimmedQuestion)) {
     const refusal = {
       direct:
         "I can only answer canon-grounded questions from your saved chapters and generated canon. I cannot help with brainstorming or creative writing.",
@@ -198,6 +204,7 @@ export async function answerCanonQuestion(input: {
       evidenceJson: JSON.stringify([]),
     });
     setPendingCanonAction(conversationId, null);
+
     return {
       conversationId,
       answer: refusal,
@@ -220,7 +227,7 @@ export async function answerCanonQuestion(input: {
     );
   }
 
-  const context = retrieveCanonContext(input.question);
+  const context = retrieveCanonContext(trimmedQuestion);
   if (context.evidence.length === 0) {
     const insufficient = {
       direct:
@@ -239,6 +246,7 @@ export async function answerCanonQuestion(input: {
       evidenceJson: JSON.stringify([]),
     });
     setPendingCanonAction(conversationId, null);
+
     return {
       conversationId,
       answer: insufficient,
@@ -248,12 +256,15 @@ export async function answerCanonQuestion(input: {
   }
 
   const provider = getProvider(project.provider);
-  const evidenceStrings = context.evidence.map(
-    (item) => `${item.label}: ${item.snippet}`,
-  );
-  const prompt = buildChatPrompt(input.question, evidenceStrings);
+
+  const evidenceStrings = context.evidence.map((item) => {
+    const label = item.label.trim();
+    const snippet = item.snippet.trim();
+    return `${label}: ${snippet}`;
+  });
+
   const answer = await provider.answerCanonQuestion({
-    question: prompt,
+    question: trimmedQuestion,
     evidence: evidenceStrings,
     apiKey,
   });

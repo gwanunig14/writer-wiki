@@ -57,6 +57,37 @@
       }
     }
   }
+  // TODO DELETE THIS LATER
+  async function handleExportRequestPackage() {
+    const chapter = $activeChapter;
+    if (!chapter?.id) return;
+    const response = await fetch(
+      `/api/chapters/${chapter.id}/request-package`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      },
+    );
+    if (!response.ok) {
+      alert("Failed to build request package");
+      return;
+    }
+    const data = await response.json();
+    // Download as JSON file
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chapter-${chapter.number ?? chapter.id}-scan-request-package.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
 
   $: scanInProgress =
     $activeScanJob !== null &&
@@ -149,6 +180,12 @@
           class="scan"
           on:click={handleScan}
           disabled={$loading}>Scan</button
+        >
+        <button
+          type="button"
+          class="export-request-package"
+          on:click={handleExportRequestPackage}
+          disabled={$loading}>Export Request Package</button
         >
       </div>
 

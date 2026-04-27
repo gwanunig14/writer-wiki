@@ -1,9 +1,14 @@
-import { buildScanPrompt } from "$lib/server/prompts/scan-prompt";
+import {
+  getScanRuntimeSystemPrompt,
+  buildChapterScanInput,
+  buildChapterScanPayload,
+} from "$lib/server/prompts/scan-prompt";
 import {
   addScanArtifact,
   createScanJob,
   getActiveScanJob,
   getScanJob,
+  setScanJobBatchMetadata,
   updateScanJob,
 } from "$lib/server/db/repositories/scan-repository";
 import {
@@ -21,6 +26,7 @@ import { normalizeScanResult } from "./normalize-scan-result";
 import { reconcileCanon } from "./reconcile-canon";
 import { markLaterAffectedChaptersStale } from "./rescan-propagation";
 import { getScanContext } from "./scan-context";
+import { deriveScanSummary } from "./derive-scan-summary";
 
 function formatChapterLabel(number: number | null, title: string) {
   if (number !== null && title.trim().toLowerCase() === `chapter ${number}`) {
@@ -164,37 +170,85 @@ async function runScanJob(
     const scanContext = getScanContext(chapter);
     logScanEvent("gathered context", {
       scanJobId,
-      relatedCanonEntries: scanContext.relatedCanon.length,
+      comparisonPacketEntities: scanContext.comparisonPacket.entities.length,
       touchedEntityCount: scanContext.stats.touchedEntityCount,
       chronologyContextCount: scanContext.stats.chronologyCount,
       watchlistContextCount: scanContext.stats.watchlistCount,
       seriesBibleContextCount: scanContext.stats.seriesBibleSectionCount,
     });
-    const prompt = buildScanPrompt(chapter, scanContext.relatedCanon);
+    const requestPayload = buildChapterScanPayload({
+      chapterNumber: chapter.number,
+      chapterTitle: chapter.title,
+      chapterText: chapterVersion.text,
+      comparisonPacket: scanContext.comparisonPacket,
+    });
+    const requestInput = buildChapterScanInput(requestPayload);
 
     updateScanJob(scanJobId, "running");
     logScanEvent("calling provider", {
       scanJobId,
       provider: provider.name,
-      promptLength: prompt.length,
+      comparisonEntityCount: requestPayload.comparisonPacket.entities.length,
+      chapterLength: requestPayload.chapter.text.length,
     });
-    const rawResult = await provider.scanChapter({
-      prompt,
+    // Compute priorCanonCoverage for prompt
+    const priorCanonCoverage = scanContext.priorCanonCoverage || "none";
+    const systemPrompt = getScanRuntimeSystemPrompt(priorCanonCoverage);
+    const { parsedResult, rawApiResponse } = await provider.scanChapter({
+      systemPrompt,
+      requestInput,
+      requestPayload,
       chapterText: chapterVersion.text,
       chapterLabel: formatChapterLabel(chapter.number ?? null, chapter.title),
       apiKey,
       userBlocking: options.userBlocking,
+      onBatchLifecycleEvent: (event) => {
+        if (event.phase === "submitted" && event.batchInputFileId) {
+          setScanJobBatchMetadata({
+            scanJobId,
+            batchId: event.batchId,
+            batchCustomId: event.batchCustomId,
+            batchInputFileId: event.batchInputFileId,
+          });
+          addScanArtifact(scanJobId, "batch-submitted", event);
+          return;
+        }
+
+        if (event.phase === "polling") {
+          addScanArtifact(scanJobId, "batch-poll", {
+            batchId: event.batchId,
+            batchCustomId: event.batchCustomId,
+            status: event.batchStatus,
+          });
+          return;
+        }
+
+        if (event.phase === "completed") {
+          addScanArtifact(scanJobId, "batch-completed", event);
+        }
+      },
       escalationHints: scanContext.escalationHints,
     });
-    addScanArtifact(scanJobId, "raw-provider-response", rawResult);
+    if (rawApiResponse) {
+      addScanArtifact(scanJobId, "raw-api-response", rawApiResponse);
+      logScanEvent("raw api response", {
+        scanJobId,
+        preview:
+          typeof rawApiResponse === "object"
+            ? JSON.stringify(rawApiResponse).slice(0, 500)
+            : String(rawApiResponse).slice(0, 500),
+      });
+    }
+    addScanArtifact(scanJobId, "raw-provider-response", parsedResult);
     logScanEvent("provider returned result", {
       scanJobId,
-      entityCount: rawResult.entities.length,
-      chronologyCount: rawResult.chronology.length,
-      watchlistCount: rawResult.watchlist.length,
+      entityCount: parsedResult.entities.length,
+      chronologyCount: parsedResult.chronology.length,
+      watchlistCount: parsedResult.watchlist.length,
     });
 
-    const normalized = normalizeScanResult(rawResult, chapterVersion.text);
+    const normalized = normalizeScanResult(parsedResult, chapterVersion.text);
+    const derivedSummary = deriveScanSummary(normalized);
     addScanArtifact(scanJobId, "normalized-scan-result", normalized);
     logScanEvent("normalized result", {
       scanJobId,
@@ -206,9 +260,19 @@ async function runScanJob(
     updateScanJob(scanJobId, "reconciling");
     const reconciliation = reconcileCanon(chapter.id, normalized);
     const laterAffectedChapterIds = markLaterAffectedChaptersStale(chapter.id);
+    const summary = {
+      ...derivedSummary,
+      articlesUpdated: Array.from(
+        new Set([
+          ...derivedSummary.articlesUpdated,
+          ...laterAffectedChapterIds,
+        ]),
+      ),
+    };
     addScanArtifact(scanJobId, "reconciliation-report", {
       ...reconciliation,
       laterAffectedChapterIds,
+      summary,
     });
     logScanEvent("reconciled canon", {
       scanJobId,
@@ -220,24 +284,27 @@ async function runScanJob(
     regenerateProjectFiles();
     markChapterScanned(chapter.id, chapterVersion.id);
 
-    updateScanJob(
-      scanJobId,
-      "success",
-      JSON.stringify({
-        ...normalized.summary,
-        articlesUpdated: Array.from(
-          new Set([
-            ...normalized.summary.articlesUpdated,
-            ...laterAffectedChapterIds,
-          ]),
-        ),
-      }),
-    );
+    updateScanJob(scanJobId, "success", JSON.stringify(summary));
     logScanEvent("completed successfully", {
       scanJobId,
       chapterId: chapter.id,
       chapterVersionId: chapterVersion.id,
     });
+
+    // --- Write normalized scan result to JSON file ---
+    try {
+      const { writeFileSync, mkdirSync, existsSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const tmpDir = join(process.cwd(), "tmp");
+      if (!existsSync(tmpDir)) mkdirSync(tmpDir);
+      const chapterNum = chapter.number ?? chapter.id;
+      const fileName = `chapter-${chapterNum}-scan-response.json`;
+      const filePath = join(tmpDir, fileName);
+      writeFileSync(filePath, JSON.stringify(normalized, null, 2), "utf-8");
+      logScanEvent("wrote scan response JSON", { filePath });
+    } catch (err) {
+      console.error("[scan] failed to write scan response JSON", err);
+    }
   } catch (error) {
     console.error("[scan] failed", {
       scanJobId,

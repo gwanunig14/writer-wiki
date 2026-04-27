@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildScanPrompt } from "$lib/server/prompts/scan-prompt";
+import {
+  buildChapterScanInput,
+  buildChapterScanPayload,
+} from "$lib/server/prompts/scan-prompt";
 import { scanResultSchema } from "$lib/types/scan-result";
 import {
   extractDeterministicCanon,
@@ -26,14 +29,15 @@ describe("foundation services", () => {
       '  "entities": [],',
       '  "chronology": [],',
       '  "watchlist": [],',
-      '  "summary": {',
-      '    "articlesCreated": [],',
-      '    "articlesUpdated": [],',
-      '    "stubsCreated": [],',
-      '    "chronologyUpdated": [],',
-      '    "continuityUpdated": [],',
-      '    "contradictionsFlagged": []',
-      "  }",
+      '  "newCanon": [],',
+      '  "updatedCanon": [],',
+      '  "seriesBibleImpact": {',
+      '    "outcome": "no-series-bible-update-needed",',
+      '    "rationale": "",',
+      '    "impactedSections": []',
+      "  },",
+      '  "fileImpact": [],',
+      '  "changeLog": []',
       "}",
       "```",
     ].join("\n");
@@ -49,40 +53,46 @@ describe("foundation services", () => {
   "entities": [],
   "chronology": [],
   "watchlist": [],
-  "summary": {
-    "articlesCreated": [],
-    "articlesUpdated": [],
-    "stubsCreated": [],
-    "chronologyUpdated": [],
-    "continuityUpdated": [],
-    "contradictionsFlagged": []
-  }
+  "newCanon": [],
+  "updatedCanon": [],
+  "seriesBibleImpact": {
+    "outcome": "no-series-bible-update-needed",
+    "rationale": "",
+    "impactedSections": []
+  },
+  "fileImpact": [],
+  "changeLog": []
 }`);
 
-    expect(scanResultSchema.parse(parsed).summary.articlesCreated).toEqual([]);
+    expect(scanResultSchema.parse(parsed).newCanon).toEqual([]);
   });
 
-  it("asks scan summaries to include supported physical description", () => {
-    const prompt = buildScanPrompt(
-      {
-        id: "chapter-1",
-        number: 1,
-        title: "Chapter 1",
-        currentText: "Marcus is tall, broad-shouldered, and red-haired.",
-        status: "saved",
-        latestVersionId: null,
-        lastScannedVersionId: null,
-        createdAt: "2026-04-19T00:00:00.000Z",
-        updatedAt: "2026-04-19T00:00:00.000Z",
+  it("builds lean responses-api input payloads", () => {
+    const payload = buildChapterScanPayload({
+      chapterNumber: 1,
+      chapterTitle: "Chapter 1",
+      chapterText: "Marcus is tall, broad-shouldered, and red-haired.",
+      comparisonPacket: {
+        entities: [
+          {
+            canonicalName: "Marcus Day",
+            category: "character",
+            aliases: ["Marcus"],
+            stableFacts: ["A bounty hunter with a scar over one eyebrow."],
+            openRisks: [],
+          },
+        ],
+        chronologyComparisonFacts: ["Chapter 1 opens at the city gate."],
+        watchlistNotes: ["No contradictions noted yet."],
       },
-      ["Marcus Day: A bounty hunter with a scar over one eyebrow."],
-    );
+    });
+    const requestInput = buildChapterScanInput(payload);
 
-    expect(prompt).toContain("Treat chapter text as primary authority");
-    expect(prompt).toContain("Preserve contradictions and ambiguity");
-    expect(prompt).toContain("allowed types only");
-    expect(prompt).toContain("Series bible impact");
-    expect(prompt).toContain("File impact");
-    expect(prompt).toContain("Return valid JSON only");
+    expect(requestInput[0]?.role).toBe("system");
+    expect(requestInput[1]?.role).toBe("user");
+    expect(requestInput[1]?.content[0]?.text).toContain(
+      "Structured chapter scan payload:",
+    );
+    expect(requestInput[1]?.content[1]?.text).toContain("comparisonPacket");
   });
 });

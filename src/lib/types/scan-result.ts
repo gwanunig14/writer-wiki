@@ -24,6 +24,14 @@ export const scanEntitySchema = z.object({
   links: z
     .array(z.object({ targetName: z.string(), relationType: z.string() }))
     .default([]),
+  characterImportance: z
+    .enum(["main", "major", "minor"])
+    .nullable()
+    .default(null),
+  roleTitleFacts: z.array(z.string()).default([]),
+  physicalDescription: z.array(z.string()).default([]),
+  relationshipFacts: z.array(z.string()).default([]),
+  outfitByScene: z.array(z.string()).default([]),
 });
 
 export const chronologyItemSchema = z.object({
@@ -77,15 +85,17 @@ export const scanResultSchema = z.object({
   }),
   fileImpact: z.array(fileImpactItemSchema).default([]),
   changeLog: z.array(z.string()).default([]),
-  summary: z.object({
-    articlesCreated: z.array(z.string()).default([]),
-    articlesUpdated: z.array(z.string()).default([]),
-    stubsCreated: z.array(z.string()).default([]),
-    chronologyUpdated: z.array(z.string()).default([]),
-    continuityUpdated: z.array(z.string()).default([]),
-    contradictionsFlagged: z.array(z.string()).default([]),
-  }),
+});
+
+export const scanSummarySchema = z.object({
+  articlesCreated: z.array(z.string()).default([]),
+  articlesUpdated: z.array(z.string()).default([]),
+  stubsCreated: z.array(z.string()).default([]),
+  chronologyUpdated: z.array(z.string()).default([]),
+  continuityUpdated: z.array(z.string()).default([]),
+  contradictionsFlagged: z.array(z.string()).default([]),
 });
 
 export type ScanResult = z.infer<typeof scanResultSchema>;
 export type ScanEntity = z.infer<typeof scanEntitySchema>;
+export type ScanSummary = z.infer<typeof scanSummarySchema>;

@@ -1,3 +1,4 @@
+import type { PendingCanonAction } from "$lib/server/chat/canon-chat-service";
 import { getDatabase, makeId, nowIso } from "$lib/server/db/client";
 
 const pendingActionPrefix = "__pending_canon_action__:";
@@ -80,7 +81,7 @@ export function listConversationMessages(conversationId: string) {
 
 export function setPendingCanonAction(
   conversationId: string,
-  action: Record<string, unknown> | null,
+  action: PendingCanonAction | null,
 ) {
   appendChatMessage({
     conversationId,

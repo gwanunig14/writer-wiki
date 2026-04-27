@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
   completed_at TEXT,
   summary_json TEXT,
   error_message TEXT,
+  batch_id TEXT,
+  batch_custom_id TEXT,
+  batch_input_file_id TEXT,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS scan_result_artifacts (
@@ -164,6 +167,23 @@ export function migrate() {
 
   if (!entityColumnNames.has("parent_entity_id")) {
     db.exec("ALTER TABLE entities ADD COLUMN parent_entity_id TEXT");
+  }
+
+  const scanJobColumns = db
+    .prepare("PRAGMA table_info(scan_jobs)")
+    .all() as Array<Record<string, unknown>>;
+  const scanJobColumnNames = new Set(
+    scanJobColumns.map((column) => String(column.name)),
+  );
+
+  if (!scanJobColumnNames.has("batch_id")) {
+    db.exec("ALTER TABLE scan_jobs ADD COLUMN batch_id TEXT");
+  }
+  if (!scanJobColumnNames.has("batch_custom_id")) {
+    db.exec("ALTER TABLE scan_jobs ADD COLUMN batch_custom_id TEXT");
+  }
+  if (!scanJobColumnNames.has("batch_input_file_id")) {
+    db.exec("ALTER TABLE scan_jobs ADD COLUMN batch_input_file_id TEXT");
   }
 }
 
